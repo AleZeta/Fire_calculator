@@ -1,5 +1,13 @@
 """Dashboard interattiva Web in Streamlit per il simulatore FIRE avanzato (Germania / Italia)."""
 
+import sys
+from pathlib import Path
+
+# Assicura che la directory radice del progetto sia sempre in sys.path (per Streamlit Cloud / Linux)
+BASE_DIR = Path(__file__).resolve().parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
 import streamlit as st
 import numpy as np
 import pandas as pd
@@ -16,6 +24,7 @@ from src.inflation import genera_inflazione
 from src.simulation import (
     esegui_simulazione_completa,
     simula_stress_test_storico,
+    esegui_analisi_sensitivita_strategie,
 )
 from src.taxes import (
     calcola_stipendio_netto_automatico,
@@ -26,6 +35,7 @@ from src.visualization import (
     render_fig_heatmap_successo,
     render_fig_heatmap_wd,
     plot_fan_chart_portafoglio_fire,
+    render_fig_heatmap_sensitivita,
 )
 from src.pdf_report import genera_report_pdf_fire
 
@@ -276,6 +286,11 @@ def calcola_simulazione_fire(config: SimulationConfig, _m_eq, _md_eq, _md_bd, _i
     return esegui_simulazione_completa(config, _m_eq, _md_eq, _md_bd, _infl)
 
 
+@st.cache_data(show_spinner="Esecuzione analisi di sensitività strategica su allocazioni e worst-case...")
+def calcola_sensitivita_cached(config: SimulationConfig, _m_eq, _md_eq, _md_bd, _infl, eta_rif: int):
+    return esegui_analisi_sensitivita_strategie(config, _m_eq, _md_eq, _md_bd, _infl, eta_fire_rif=eta_rif)
+
+
 if "sim_data" not in st.session_state or submit_btn:
     with st.spinner("Calcolo della simulazione FIRE in corso..."):
         m_eq, md_eq, md_bond, inflazione = get_dati_mercato(
@@ -292,6 +307,9 @@ if "sim_data" not in st.session_state or submit_btn:
         f_infl_media[0] = 1.0
         st.session_state["sim_data"] = {
             "cfg": cfg,
+            "m_eq": m_eq,
+            "md_eq": md_eq,
+            "md_bond": md_bond,
             "inflazione": inflazione,
             "f_infl_media": f_infl_media,
             "risultati": risultati,
@@ -299,6 +317,9 @@ if "sim_data" not in st.session_state or submit_btn:
 
 sim_data = st.session_state["sim_data"]
 cfg = sim_data["cfg"]
+m_eq = sim_data["m_eq"]
+md_eq = sim_data["md_eq"]
+md_bond = sim_data["md_bond"]
 inflazione = sim_data["inflazione"]
 f_infl_media = sim_data["f_infl_media"]
 risultati = sim_data["risultati"]
@@ -398,11 +419,12 @@ def _cached_heatmap_wd(wd_data_matrix, x_labels, y_labels):
     return render_fig_heatmap_wd(wd_data_matrix, x_labels, y_labels)
 
 
-# ----------------- TABS CON GRAFICI (4 Tab Principali) -----------------
-tab1, tab2, tab3, tab4 = st.tabs([
+# ----------------- TABS CON GRAFICI (5 Tab Principali) -----------------
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🎯 Heatmap (Successo & SWR)",
     "📈 Evoluzione Patrimonio & Stress Test",
     "🏛️ Spese e Pensioni UE (GRV + INPS)",
+    "🔬 Analisi di Sensitività Strategie",
     "📥 Riepilogo & Esportazione Piano"
 ])
 
@@ -754,6 +776,93 @@ with tab3:
     plt.close(fig_tax)
 
 with tab4:
+    st.markdown("### 🔬 Analisi di Sensitività Strategica: Asset Allocation Pre/Post FIRE, Sanità e Bond Tent")
+    st.markdown(
+        "Questa analisi effettua una scansione sistematica incrociata per identificare la strategia ottimale che ti consente "
+        "di raggiungere il **FIRE il prima possibile** garantendo **almeno il 99% di probabilità di successo fino a 100 anni** "
+        "e la massima resilienza contro il peggior scenario (1° percentile e crolli storici reali).\n\n"
+        "Tutti i tuoi parametri personali (RAL, spese, capitale di partenza, carriera pregressa IT/DE) restano fissati, "
+        "mentre vengono variati simultaneamente:\n"
+        "- **Allocazione Azionaria Pre-FIRE** (Fase di Accumulo: da 50% a 90%)\n"
+        "- **Allocazione Azionaria Post-FIRE** (Fase di Decumulo: da 30% a 70%, con vincolo Post ≤ Pre)\n"
+        "- **Glidepath Dinamico (Bond Tent)**: Attivo vs Disattivato\n"
+        + ("- **Regime Sanitario**: Pubblica (GKV) vs Privata (PKV)" if is_germania else "")
+    )
+
+    df_sens = calcola_sensitivita_cached(cfg, m_eq, md_eq, md_bond, inflazione, eta_fire_sel)
+
+    # Controlli interattivi per la vista della Tabella e della Heatmap
+    col_s1, col_s2, col_s3 = st.columns([1, 1, 1.2])
+    with col_s1:
+        if is_germania:
+            filtro_sanita = st.selectbox(
+                "Regime Sanitario da Esaminare:",
+                options=["GKV (Pubblica)", "PKV (Privata)"],
+                index=0 if cfg.tipo_sanita_germania.upper() == "GKV" else 1
+            )
+            sanita_val = "GKV" if "GKV" in filtro_sanita else "PKV"
+        else:
+            sanita_val = cfg.tipo_sanita_germania
+            st.info("Sanità: SSN Italia")
+
+    with col_s2:
+        filtro_bt = st.selectbox(
+            "Glidepath Dinamico (Bond Tent):",
+            options=["Sì (Attivo)", "No (Costante)"],
+            index=0 if cfg.usa_bond_tent else 1
+        )
+        bt_val = "Sì" if "Sì" in filtro_bt else "No"
+
+    with col_s3:
+        st.caption(
+            "🎯 **Criteri di Decisione Ottimale**:\n"
+            "- **Età Min 99%**: Età minima di pensionamento FIRE con successo ≥ 99% a 100 anni.\n"
+            f"- **Worst-Case 100a**: Capitale residuo al 1° percentile all'età di 100 anni con ritiro a {eta_fire_sel}a."
+        )
+
+    # 1. Heatmap 2D
+    st.markdown("#### 🗺️ Matrice 2D: Età Minima di Ritiro con Successo ≥ 99% fino a 100 Anni")
+    st.caption("Ogni cella indica l'età più giovane in cui puoi ritirarti raggiungendo il 99% di successo a fine vita (100 anni).")
+    fig_sens = render_fig_heatmap_sensitivita(df_sens, sanita_sel=sanita_val, bond_tent_sel=bt_val)
+    st.pyplot(fig_sens)
+    plt.close(fig_sens)
+
+    # 2. Ranking delle Strategie
+    st.markdown("---")
+    st.markdown(f"#### 🏆 Classifica delle Migliori Strategie per Worst-Case Survival (Ritiro a {eta_fire_sel}a)")
+    st.caption("Ordinamento: 1° Età Minima di FIRE al 99%, 2° Tasso di Successo, 3° Capitale al 1° Percentile peggiore.")
+
+    sub_df = df_sens[df_sens["Bond Tent"] == bt_val]
+    if is_germania:
+        sub_df = sub_df[sub_df["Sanità"] == sanita_val]
+
+    cols_display = [
+        "Azioni Pre-FIRE", "Azioni Post-FIRE", "Bond Tent",
+        "Età Min 99%", "Età Min 95%", f"Succ a {eta_fire_sel}a (%)",
+        f"1° Perc 100a (Ritiro {eta_fire_sel}a)", f"Mediana 100a (Ritiro {eta_fire_sel}a)",
+        "Crisi Storiche OK / 4", "Peggiore Shock Storico (€)"
+    ]
+    if is_germania:
+        cols_display.insert(0, "Sanità")
+
+    st.dataframe(
+        sub_df[cols_display].reset_index(drop=True),
+        use_container_width=True,
+        height=380
+    )
+
+    if len(sub_df) > 0:
+        top_row = sub_df.iloc[0]
+        st.success(
+            f"💡 **Strategia Consigliata per la Massima Copertura dai Worst-Case**: "
+            f"Accumulo con **{top_row['Azioni Pre-FIRE']} Azioni** ➔ Decumulo FIRE con **{top_row['Azioni Post-FIRE']} Azioni** "
+            f"(Bond Tent: **{top_row['Bond Tent']}** | Sanità: **{top_row.get('Sanità', 'N/D')}**).\n\n"
+            f"- **Età Minima FIRE al 99%**: **{top_row['Età Min 99%']} anni**\n"
+            f"- **Capitale Residuo nel Caso Peggiore (1° Perc. a 100a)**: **{top_row[f'1° Perc 100a (Ritiro {eta_fire_sel}a)']:,.0f} €**\n"
+            f"- **Resistenza a Crisi Storiche (1973, 2000, 2008, 2022)**: **{top_row['Crisi Storiche OK / 4']} su 4** superate senza esaurimento del capitale."
+        )
+
+with tab5:
     st.markdown("### 📥 Riepilogo Esecutivo Anno per Anno & Esportazione Piano FIRE")
     st.markdown(
         "Esamina la tabella completa della tua traiettoria di vita con il piano selezionato ed esporta i dati in formato **CSV compatibile con Excel** o scarica il **Dossier PDF Esecutivo** professionale."
@@ -851,10 +960,11 @@ with tab4:
 
     with col_d2:
         st.markdown("##### 📄 Dossier Strategico FIRE (PDF Esecutivo)")
-        st.caption("Dossier completo ad alta risoluzione: KPI cards, Fan Chart logaritmico, doppie Heatmap, flussi di cassa, tasse e stress test.")
+        st.caption("Dossier completo ad alta risoluzione: KPI cards, Fan Chart logaritmico, doppie Heatmap, flussi di cassa, tasse, stress test e analisi di sensitività (5 pagine).")
+        df_sens_export = calcola_sensitivita_cached(cfg, m_eq, md_eq, md_bond, inflazione, eta_fire_sel)
         st.download_button(
-            label="📥 Scarica Report PDF Esecutivo",
-            data=lambda: genera_report_pdf_fire(cfg, risultati, anno_export_sel, tutti_stress_dict),
+            label="📥 Scarica Report PDF Esecutivo (5 Pagine)",
+            data=lambda: genera_report_pdf_fire(cfg, risultati, anno_export_sel, tutti_stress_dict, df_sens=df_sens_export),
             file_name=f"report_esecutivo_fire_ritiro_{eta_fire_exp}a.pdf",
             mime="application/pdf",
             type="primary",

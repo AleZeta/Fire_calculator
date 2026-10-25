@@ -3,6 +3,7 @@
 from dataclasses import replace
 from typing import Tuple, Dict, Any, Optional
 import numpy as np
+import pandas as pd
 from scipy.ndimage import uniform_filter1d
 
 from config.settings import SimulationConfig
@@ -611,3 +612,177 @@ def simula_stress_test_storico(
     parte_acc = cap_tot_acc[:anni_accumulo, :]
     matrice_unita = np.concatenate((parte_acc, cap_fire), axis=0)
     return matrice_unita[:config.anni_vita, 0]
+
+
+def esegui_analisi_sensitivita_strategie(
+    config: SimulationConfig,
+    m_eq: np.ndarray,
+    md_eq: np.ndarray,
+    md_bond: np.ndarray,
+    inflazione: np.ndarray,
+    eta_fire_rif: int = 45,
+    num_sim_sens: int = 1500
+) -> pd.DataFrame:
+    """
+    Esegue una scansione sistematica ottimizzata dell'albero dei parametri strategici a partire dalla configurazione utente:
+    - Varia l'asset allocation Pre-FIRE (Accumulo) e Post-FIRE (Decumulo).
+    - Varia la presenza o assenza della Bond Tent.
+    - Varia il regime sanitario (GKV vs PKV se in Germania).
+    Mantiene intatti tutti gli altri parametri inseriti dall'utente (RAL, spese, capitale, pensione, inflazione, ecc.).
+    Ritorna un DataFrame ordinato per età minima di FIRE al 99% e tenuta al 1° percentile peggiore.
+    """
+    n_s = min(num_sim_sens, m_eq.shape[1])
+    m_sub = m_eq[:, :n_s]
+    md_sub = md_eq[:, :n_s]
+    bd_sub = md_bond[:, :n_s]
+    inf_sub = inflazione[:, :n_s]
+    cum_infl = np.cumprod(1.0 + inf_sub, axis=0)
+
+    eq_acc_list = [0.90, 0.80, 0.70, 0.60, 0.50]
+    eq_fire_list = [0.70, 0.60, 0.50, 0.40, 0.30]
+    sanita_opts = ["GKV", "PKV"] if config.is_germania else [config.tipo_sanita_germania]
+    bond_tent_opts = [True, False]
+
+    coppie_alloc = [(acc, fire) for acc in eq_acc_list for fire in eq_fire_list if fire <= acc]
+    anno_rif = max(0, min(eta_fire_rif - config.eta_iniziale, config.anni_acc - 1))
+    anni_vita = config.anni_vita
+
+    # Pre-calcolo vettorizzato condiviso per regime sanitario per evitare ricalcoli inutili
+    cache_sanita = {}
+    for san in sanita_opts:
+        c_s = replace(config, num_simulazioni=n_s, tipo_sanita_germania=san)
+        spese_s = calcola_curva_spese_dinamica(c_s, inf_sub)
+        depositi_s, ral_infl_s, tfr_s = calcola_depositi_e_tfr(c_s, inf_sub, spese_s, cum_infl)
+        p_dets_s = [
+            calcola_pensione_totale_ue(
+                c_s.paese, d, c_s.anni_pregressi_italia, c_s.anni_pregressi_germania,
+                c_s.ral_pregressa_italia, ral_infl_s, inf_sub, c_s.eta_iniziale,
+                c_s.eta_pensione, c_s.pil_reale_medio, c_s.tipo_sanita_germania, cum_infl
+            )
+            for d in range(c_s.anni_acc)
+        ]
+        acc_map_s = {}
+        for eq_a in eq_acc_list:
+            c_a = replace(c_s, target_equity_accumulo=eq_a, target_bond_accumulo=1.0 - eq_a)
+            acc_map_s[eq_a] = accumula_multi_asset_tax_efficient(c_a, depositi_s, md_sub, bd_sub)
+
+        cache_sanita[san] = {
+            "spese": spese_s,
+            "tfr": tfr_s,
+            "p_dets": p_dets_s,
+            "acc_map": acc_map_s
+        }
+
+    records = []
+    for sanita in sanita_opts:
+        c_data = cache_sanita[sanita]
+        spese_cur = c_data["spese"]
+        p_dets_cur = c_data["p_dets"]
+        tfr_cur = c_data["tfr"]
+
+        for bt in bond_tent_opts:
+            for (acc_eq, fire_eq) in coppie_alloc:
+                cfg_run = replace(
+                    config,
+                    num_simulazioni=n_s,
+                    tipo_sanita_germania=sanita,
+                    usa_bond_tent=bt,
+                    target_equity_accumulo=acc_eq,
+                    target_bond_accumulo=1.0 - acc_eq,
+                    target_equity_fire=fire_eq,
+                    target_bond_fire=1.0 - fire_eq
+                )
+                cap_tot_acc, cap_eq_acc, cap_bd_acc, carico_eq_acc, carico_bd_acc = c_data["acc_map"][acc_eq]
+
+                def eval_dyn(dyn: int):
+                    eq_start = cap_eq_acc[dyn, :].copy()
+                    bd_start = cap_bd_acc[dyn, :].copy()
+                    ceq_start = carico_eq_acc[dyn, :].copy()
+                    cbd_start = carico_bd_acc[dyn, :].copy()
+                    if cfg_run.abilita_tfr and dyn > 0:
+                        liq_tfr = tfr_cur[dyn, :] * (1.0 - cfg_run.tassazione_separata_tfr)
+                        eq_start += liq_tfr * acc_eq
+                        bd_start += liq_tfr * (1.0 - acc_eq)
+                        ceq_start += liq_tfr * acc_eq
+                        cbd_start += liq_tfr * (1.0 - acc_eq)
+
+                    cap_fire, _ = simula_decumulo_fire_avanzato(
+                        dyn, eq_start, bd_start, ceq_start, cbd_start,
+                        spese_cur, p_dets_cur[dyn], m_sub, md_sub, bd_sub, inf_sub,
+                        cfg_run, cum_infl=cum_infl
+                    )
+                    idx_end = anni_vita - dyn - 1
+                    succ = float(np.mean(cap_fire[idx_end, :] > 0) * 100.0)
+                    return succ, cap_fire
+
+                succ_cache = {}
+                def get_succ(d: int):
+                    if d not in succ_cache:
+                        succ, c_f = eval_dyn(d)
+                        succ_cache[d] = (succ, c_f)
+                    return succ_cache[d]
+
+                # Valutazione all'anno di riferimento (es. 45a o selezione utente)
+                succ_rif, c_f_rif = get_succ(anno_rif)
+                p01_rif = float(np.percentile(c_f_rif[-1, :], 1))
+                p50_rif = float(np.median(c_f_rif[-1, :]))
+
+                # Ricerca binaria efficiente per la prima età con successo >= 99%
+                low, high = 0, config.anni_acc - 1
+                min_dyn_99 = 999
+                while low <= high:
+                    mid = (low + high) // 2
+                    s_mid, _ = get_succ(mid)
+                    if s_mid >= 99.0:
+                        min_dyn_99 = mid
+                        high = mid - 1
+                    else:
+                        low = mid + 1
+                eta_fire_99 = int(config.eta_iniziale + min_dyn_99) if min_dyn_99 < 900 else 999
+
+                # Ricerca binaria per la prima età con successo >= 95%
+                low, high = 0, min(min_dyn_99, config.anni_acc - 1)
+                min_dyn_95 = 999
+                while low <= high:
+                    mid = (low + high) // 2
+                    s_mid, _ = get_succ(mid)
+                    if s_mid >= 95.0:
+                        min_dyn_95 = mid
+                        high = mid - 1
+                    else:
+                        low = mid + 1
+                eta_fire_95 = int(config.eta_iniziale + min_dyn_95) if min_dyn_95 < 900 else 999
+
+                s_73 = simula_stress_test_storico(cfg_run, 1973, anno_rif)[-1]
+                s_00 = simula_stress_test_storico(cfg_run, 2000, anno_rif)[-1]
+                s_08 = simula_stress_test_storico(cfg_run, 2008, anno_rif)[-1]
+                s_22 = simula_stress_test_storico(cfg_run, 2022, anno_rif)[-1]
+                n_crisi_ok = sum([s_73 > 0, s_00 > 0, s_08 > 0, s_22 > 0])
+                peggior_crisi = min(s_73, s_00, s_08, s_22)
+
+                records.append({
+                    "Sanità": sanita,
+                    "Bond Tent": "Sì" if bt else "No",
+                    "Azioni Pre-FIRE": f"{int(acc_eq * 100)}%",
+                    "Bond Pre-FIRE": f"{int((1 - acc_eq) * 100)}%",
+                    "Azioni Post-FIRE": f"{int(fire_eq * 100)}%",
+                    "Bond Post-FIRE": f"{int((1 - fire_eq) * 100)}%",
+                    "Età Min 99%": eta_fire_99,
+                    "Età Min 95%": eta_fire_95,
+                    f"Succ a {eta_fire_rif}a (%)": round(succ_rif, 1),
+                    f"1° Perc 100a (Ritiro {eta_fire_rif}a)": round(p01_rif),
+                    f"Mediana 100a (Ritiro {eta_fire_rif}a)": round(p50_rif),
+                    "Crisi Storiche OK / 4": n_crisi_ok,
+                    "Peggiore Shock Storico (€)": round(peggior_crisi),
+                    "_acc_val": acc_eq,
+                    "_fire_val": fire_eq,
+                    "_bt_val": bt,
+                    "_sanita_val": sanita
+                })
+
+    df = pd.DataFrame(records)
+    col_succ = f"Succ a {eta_fire_rif}a (%)"
+    col_p01 = f"1° Perc 100a (Ritiro {eta_fire_rif}a)"
+    df = df.sort_values(by=["Età Min 99%", col_succ, col_p01], ascending=[True, False, False]).reset_index(drop=True)
+    return df
+

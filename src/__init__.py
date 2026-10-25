@@ -21,6 +21,7 @@ from .simulation import (
     simula_decumulo_fire_avanzato,
     esegui_simulazione_completa,
     simula_stress_test_storico,
+    esegui_analisi_sensitivita_strategie,
 )
 from .visualization import (
     format_euro,
@@ -28,6 +29,7 @@ from .visualization import (
     render_fig_heatmap_successo,
     render_fig_heatmap_wd,
     plot_fan_chart_portafoglio_fire,
+    render_fig_heatmap_sensitivita,
 )
 from .pdf_report import genera_report_pdf_fire
 

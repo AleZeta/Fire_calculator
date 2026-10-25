@@ -68,7 +68,7 @@ Fire_calculator/
 │   ├── pension.py           # Totalizzazione UE: GRV (DE) e INPS contributivo (IT)
 │   ├── simulation.py        # Motore Monte Carlo: accumulo, decumulo, bond tent e minusvalenze
 │   ├── visualization.py     # Fan chart in scala Symlog ed heatmap ad alto contrasto
-│   └── pdf_report.py        # Generatore dossier esecutivo PDF in 4 pagine A4 Landscape
+│   └── pdf_report.py        # Generatore dossier esecutivo PDF in 5 pagine A4 Landscape
 ├── data/
 │   └── historical_triads_eur.csv # Dataset sincronizzato 1970-2024 (Azioni, Bund 10Y TR, Inflazione)
 ├── output/                  # Cartella per report PDF esportati
@@ -145,8 +145,12 @@ Il progetto è pre-configurato per essere distribuito gratuitamente su **Streaml
 - **Tab 3: 🏛️ Spese e Pensioni UE (GRV + INPS)**:
   - Grafico stipendio da lavoro $\to$ stop al FIRE $\to$ ripresa pensioni UE.
   - Grafico a barre impilate di trattenute, fisco, previdenza e sanità (PKV/GKV).
-- **Tab 4: 📥 Riepilogo & Esportazione Piano**:
-  - Download in 1 clic di **Tabella CSV (Excel)** e **Dossier PDF Esecutivo di 4 pagine**.
+- **Tab 4: 🔬 Analisi di Sensitività Strategie**:
+  - Scansione sistematica multivariata su misura: varia l'allocazione azionaria Pre-FIRE (50%–90%) e Post-FIRE (30%–70%), la presenza della Bond Tent e il regime sanitario (GKV vs PKV).
+  - **Matrice 2D Heatmap**: visualizza l'età minima di FIRE per raggiungere il $99\%$ di successo fino a 100 anni.
+  - **Ranking Worst-Case**: classifica delle strategie ordinate per minima età di FIRE al 99% e tenuta al 1° percentile peggiore e contro le crisi storiche (1973, 2000, 2008, 2022).
+- **Tab 5: 📥 Riepilogo & Esportazione Piano**:
+  - Download in 1 clic di **Tabella CSV (Excel)** e **Dossier PDF Esecutivo di 5 pagine** (inclusa la nuova pagina di sensitività strategica).
   - Tabella dettagliata anno per anno con colonna **Allocazione (Azioni / Bond)**.
 
 ---

@@ -190,3 +190,80 @@ def plot_fan_chart_portafoglio_fire(
     fig.tight_layout()
 
     return fig
+
+
+def render_fig_heatmap_sensitivita(
+    df_sens: "pd.DataFrame",
+    sanita_sel: str = "GKV",
+    bond_tent_sel: str = "No"
+) -> plt.Figure:
+    """
+    Genera una heatmap 2D che mostra l'età minima di FIRE per raggiungere il 99% di successo
+    incrociando l'allocazione azionaria Pre-FIRE (righe) e Post-FIRE (colonne).
+    """
+    # Filtra per sanità e bond tent selezionati
+    sub = df_sens[df_sens["Bond Tent"] == bond_tent_sel]
+    if "Sanità" in df_sens.columns and sanita_sel in df_sens["Sanità"].values:
+        sub = sub[sub["Sanità"] == sanita_sel]
+
+    y_allocs = ["50%", "60%", "70%", "80%", "90%"]
+    x_allocs = ["30%", "40%", "50%", "60%", "70%"]
+
+    matrix_eta = np.full((len(y_allocs), len(x_allocs)), np.nan)
+
+    for i, acc in enumerate(y_allocs):
+        for j, fire in enumerate(x_allocs):
+            match = sub[(sub["Azioni Pre-FIRE"] == acc) & (sub["Azioni Post-FIRE"] == fire)]
+            if len(match) > 0:
+                val = match["Età Min 99%"].values[0]
+                if val < 900:
+                    matrix_eta[i, j] = float(val)
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    cmap_eta = mcolors.LinearSegmentedColormap.from_list(
+        "AgeGreenRed", ["#16a34a", "#84cc16", "#eab308", "#f97316", "#dc2626"]
+    )
+
+    valid_vals = matrix_eta[np.isfinite(matrix_eta)]
+    min_v = float(np.min(valid_vals)) if len(valid_vals) > 0 else 45.0
+    max_v = float(np.max(valid_vals)) if len(valid_vals) > 0 else 52.0
+    if max_v == min_v:
+        max_v += 1.0
+
+    im = ax.imshow(matrix_eta, cmap=cmap_eta, aspect="auto", vmin=min_v, vmax=max_v)
+    cbar = fig.colorbar(im, ax=ax, pad=0.02, fraction=0.035)
+    cbar.set_label("Età Minima Ritiro FIRE (Anni)", fontsize=9.5)
+    cbar.ax.tick_params(labelsize=8.5)
+
+    n_rows, n_cols = matrix_eta.shape
+    ax.set_xticks(np.arange(n_cols + 1) - 0.5, minor=True)
+    ax.set_yticks(np.arange(n_rows + 1) - 0.5, minor=True)
+    ax.grid(which="minor", color="#ffffff77", linestyle="-", linewidth=1.0)
+    ax.grid(which="major", visible=False)
+    ax.tick_params(which="minor", bottom=False, left=False)
+
+    ax.set_xticks(np.arange(n_cols))
+    ax.set_xticklabels(x_allocs, fontsize=9.5)
+    ax.set_yticks(np.arange(n_rows))
+    ax.set_yticklabels(y_allocs, fontsize=9.5)
+
+    for i in range(n_rows):
+        for j in range(n_cols):
+            val = matrix_eta[i, j]
+            if np.isnan(val):
+                ax.text(j, i, "-", ha="center", va="center", color="#94a3b8", fontsize=10.0)
+            else:
+                rel = (val - min_v) / (max_v - min_v)
+                txt_col = "#ffffff" if (rel < 0.25 or rel > 0.75) else "#0f172a"
+                ax.text(j, i, f"{int(val)} anni", ha="center", va="center", color=txt_col, fontsize=10.0, weight="bold")
+
+    ax.set_title(
+        f"Età Minima FIRE al 99% di Successo a 100 Anni (Sanità: {sanita_sel} | Bond Tent: {bond_tent_sel})",
+        fontsize=11.5, weight="bold", pad=10, color="#0f172a"
+    )
+    ax.set_ylabel("Allocazione Azioni PRE-FIRE (Accumulo)", fontsize=10.0, labelpad=8)
+    ax.set_xlabel("Allocazione Azioni POST-FIRE (Decumulo)", fontsize=10.0, labelpad=8)
+    fig.tight_layout()
+
+    return fig
+

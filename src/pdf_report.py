@@ -4,8 +4,10 @@ import io
 import textwrap
 from typing import Dict, Any, Optional, List
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+import matplotlib.colors as mcolors
 from matplotlib.backends.backend_pdf import PdfPages
 
 from config.settings import SimulationConfig
@@ -37,7 +39,8 @@ def genera_report_pdf_fire(
     config: SimulationConfig,
     risultati: Dict[str, Any],
     anno_acc_sel: int,
-    stress_dict: Optional[Dict[str, np.ndarray]] = None
+    stress_dict: Optional[Dict[str, np.ndarray]] = None,
+    df_sens: Optional[pd.DataFrame] = None
 ) -> bytes:
     """
     Genera un report esecutivo PDF multi-pagina (formato A4 Landscape) con grafica
@@ -419,6 +422,147 @@ def genera_report_pdf_fire(
 
         pdf.savefig(fig4)
         plt.close(fig4)
+
+        # =========================================================================
+        # PAGINA 5: ANALISI DI SENSITIVITÀ STRATEGICA & WORST-CASE COMPARISON
+        # =========================================================================
+        if df_sens is not None and not df_sens.empty:
+            fig5 = plt.figure(figsize=(11.69, 8.27), dpi=150)
+            fig5.patch.set_facecolor("#f8fafc")
+
+            _aggiungi_banner_intestazione(
+                fig5, [0.04, 0.91, 0.92, 0.06],
+                "ANALISI DI SENSITIVITÀ STRATEGICA: ASSET ALLOCATION PRE/POST FIRE & WORST-CASE"
+            )
+
+            # 1. Heatmap 2D a sinistra
+            ax_heat_s = fig5.add_axes([0.06, 0.14, 0.44, 0.70])
+            ax_heat_s.set_facecolor("#ffffff")
+            for sp in ax_heat_s.spines.values():
+                sp.set_color("#cbd5e1")
+
+            sub_sens = df_sens.copy()
+            if "Sanità" in sub_sens.columns and config.tipo_sanita_germania in sub_sens["Sanità"].values:
+                sub_sens = sub_sens[sub_sens["Sanità"] == config.tipo_sanita_germania]
+            sub_sens_bt = sub_sens[sub_sens["Bond Tent"] == ("Sì" if config.usa_bond_tent else "No")]
+            if sub_sens_bt.empty:
+                sub_sens_bt = sub_sens
+
+            y_allocs = ["50%", "60%", "70%", "80%", "90%"]
+            x_allocs = ["30%", "40%", "50%", "60%", "70%"]
+            mat_s = np.full((len(y_allocs), len(x_allocs)), np.nan)
+
+            for i, acc_lbl in enumerate(y_allocs):
+                for j, fire_lbl in enumerate(x_allocs):
+                    m = sub_sens_bt[(sub_sens_bt["Azioni Pre-FIRE"] == acc_lbl) & (sub_sens_bt["Azioni Post-FIRE"] == fire_lbl)]
+                    if len(m) > 0:
+                        v = m["Età Min 99%"].values[0]
+                        if v < 900:
+                            mat_s[i, j] = float(v)
+
+            valid_v = mat_s[np.isfinite(mat_s)]
+            min_v = float(np.min(valid_v)) if len(valid_v) > 0 else 45.0
+            max_v = float(np.max(valid_v)) if len(valid_v) > 0 else 52.0
+            if max_v == min_v:
+                max_v += 1.0
+
+            cmap_age = mcolors.LinearSegmentedColormap.from_list(
+                "AgeGreenRed", ["#16a34a", "#84cc16", "#eab308", "#f97316", "#dc2626"]
+            )
+            im_s = ax_heat_s.imshow(mat_s, cmap=cmap_age, aspect="auto", vmin=min_v, vmax=max_v)
+            cbar_s = fig5.colorbar(im_s, ax=ax_heat_s, pad=0.02, fraction=0.035)
+            cbar_s.set_label("Età Minima FIRE al 99% (Anni)", fontsize=8.5)
+            cbar_s.ax.tick_params(labelsize=7.5)
+
+            n_r, n_c = mat_s.shape
+            ax_heat_s.set_xticks(np.arange(n_c + 1) - 0.5, minor=True)
+            ax_heat_s.set_yticks(np.arange(n_r + 1) - 0.5, minor=True)
+            ax_heat_s.grid(which="minor", color="#ffffff77", linestyle="-", linewidth=0.8)
+            ax_heat_s.grid(which="major", visible=False)
+            ax_heat_s.tick_params(which="minor", bottom=False, left=False)
+
+            ax_heat_s.set_xticks(np.arange(n_c))
+            ax_heat_s.set_xticklabels(x_allocs, fontsize=8.5)
+            ax_heat_s.set_yticks(np.arange(n_r))
+            ax_heat_s.set_yticklabels(y_allocs, fontsize=8.5)
+
+            for i in range(n_r):
+                for j in range(n_c):
+                    val_c = mat_s[i, j]
+                    if np.isnan(val_c):
+                        ax_heat_s.text(j, i, "-", ha="center", va="center", color="#94a3b8", fontsize=8.5)
+                    else:
+                        rel = (val_c - min_v) / (max_v - min_v)
+                        txt_col = "#ffffff" if (rel < 0.25 or rel > 0.75) else "#0f172a"
+                        ax_heat_s.text(j, i, f"{int(val_c)}a", ha="center", va="center", color=txt_col, fontsize=8.5, weight="bold")
+
+            tent_str = "Sì" if config.usa_bond_tent else "No"
+            san_str = config.tipo_sanita_germania if config.is_germania else "Italia"
+            ax_heat_s.set_title(f"Matrice Età Minima FIRE al 99% (Sanità: {san_str} | Bond Tent: {tent_str})", fontsize=10.0, weight="bold", pad=8, color="#0f172a")
+            ax_heat_s.set_ylabel("Allocazione Azioni PRE-FIRE (Accumulo)", fontsize=9.0)
+            ax_heat_s.set_xlabel("Allocazione Azioni POST-FIRE (Decumulo)", fontsize=9.0)
+
+            # 2. Tabella Top Strategie a destra
+            ax_tbl_s = fig5.add_axes([0.53, 0.14, 0.43, 0.70])
+            ax_tbl_s.set_facecolor("#ffffff")
+            for sp in ax_tbl_s.spines.values():
+                sp.set_color("#cbd5e1")
+            ax_tbl_s.set_xticks([])
+            ax_tbl_s.set_yticks([])
+
+            ax_tbl_s.text(0.01, 0.96, "RANKING MIGLIORI STRATEGIE CONTRO IL WORST-CASE", fontsize=9.5, weight="bold", color="#0f172a")
+
+            top_df = df_sens.head(8)
+            col_succ_name = [c for c in top_df.columns if "Succ a" in c]
+            col_succ_str = col_succ_name[0] if len(col_succ_name) > 0 else "Succ %"
+            col_p01_name = [c for c in top_df.columns if "1° Perc" in c]
+            col_p01_str = col_p01_name[0] if len(col_p01_name) > 0 else "1° Perc"
+
+            headers_sens_tab = ["Sanità", "Tent", "Pre/Post Eq", "Età 99%", "Succ %", "1° Perc (€)", "Crisi"]
+            sens_rows = []
+            for _, r_s in top_df.iterrows():
+                alloc_pre_post = f"{r_s['Azioni Pre-FIRE']}/{r_s['Azioni Post-FIRE']}"
+                succ_val_str = f"{r_s[col_succ_str]:.1f}%" if col_succ_str in r_s else "-"
+                p01_val_str = f"{r_s[col_p01_str]:,.0f}".replace(",", ".") if col_p01_str in r_s else "-"
+                crisi_str = f"{r_s['Crisi Storiche OK / 4']}/4" if 'Crisi Storiche OK / 4' in r_s else "4/4"
+                sens_rows.append([
+                    str(r_s.get("Sanità", "-")),
+                    str(r_s.get("Bond Tent", "-")),
+                    alloc_pre_post,
+                    f"{int(r_s['Età Min 99%'])}a" if r_s['Età Min 99%'] < 900 else "N/D",
+                    succ_val_str,
+                    p01_val_str,
+                    crisi_str
+                ])
+
+            col_w_p5 = [0.12, 0.10, 0.20, 0.14, 0.14, 0.18, 0.12]
+            t_s_elem = ax_tbl_s.table(
+                cellText=sens_rows,
+                colLabels=headers_sens_tab,
+                colWidths=col_w_p5,
+                cellLoc="center",
+                loc="center",
+                bbox=[0.01, 0.18, 0.98, 0.74]
+            )
+            t_s_elem.auto_set_font_size(False)
+            t_s_elem.set_fontsize(7.2)
+
+            for (r, c), cell in t_s_elem.get_celld().items():
+                if r == 0:
+                    cell.set_facecolor("#0f172a")
+                    cell.set_text_props(color="#ffffff", weight="bold")
+                else:
+                    cell.set_facecolor("#f8fafc" if r % 2 == 0 else "#ffffff")
+                cell.set_edgecolor("#e2e8f0")
+
+            nota_takeaway = (
+                "Takeaway Strategico: Un'allocazione bilanciata (50/50 o 60/40) protegge dal Sequence Risk iniziale e massimizza\n"
+                "il capitale al 1° percentile peggiore a 100 anni, permettendo di anticipare il FIRE rispetto ad asset allocation aggressive."
+            )
+            ax_tbl_s.text(0.01, 0.04, textwrap.fill(nota_takeaway, 65), fontsize=6.8, color="#64748b", va="bottom")
+
+            pdf.savefig(fig5)
+            plt.close(fig5)
 
     buffer.seek(0)
     return buffer.getvalue()
