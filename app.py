@@ -8,6 +8,11 @@ BASE_DIR = Path(__file__).resolve().parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
+# Invalida cache dei sottomoduli interni per prevenire conflitti di memoria con gli hot-reload di Streamlit
+for _mod in list(sys.modules.keys()):
+    if _mod.startswith("src.") or _mod == "src":
+        del sys.modules[_mod]
+
 import streamlit as st
 import numpy as np
 import pandas as pd
