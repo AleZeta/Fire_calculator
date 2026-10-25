@@ -61,7 +61,7 @@ st.markdown(
 # ----------------- SIDEBAR: PARAMETRI CONFIGURAZIONE CON FORM -----------------
 st.sidebar.header("🌍 Quadro Territoriale & Fiscale")
 paese_scelto = st.sidebar.selectbox(
-    "Dove risiedi e lavori attualmente?",
+    "Dove vuoi lavorare e risiedere da qui in poi?",
     options=["Germania 🇩🇪", "Italia 🇮🇹"],
     index=0
 )
