@@ -118,7 +118,14 @@ with st.sidebar.form("form_parametri_fire"):
     capitale_iniziale = st.number_input("Capitale Iniziale Investito (€)", min_value=0, max_value=5_000_000, value=100_000, step=5_000)
     ral = st.number_input("RAL Iniziale Attuale (€)", min_value=10_000, max_value=500_000, value=85_000, step=2_500)
     crescita_ral_reale = st.slider("Crescita Reale Annua RAL (% oltre inflazione)", min_value=0.0, max_value=6.0, value=2.0, step=0.2) / 100.0
-    spese_mese = st.number_input("Spese Mensili Desiderate (€)", min_value=500, max_value=20_000, value=2_000, step=100)
+    spese_mese_accumulo = st.number_input(
+        "Spese Mensili Attuali, mentre lavori (€)", min_value=500, max_value=20_000, value=2_000, step=100,
+        help="Quanto spendi oggi al mese (€ di oggi, indicizzati all'inflazione). Quello che avanza dallo stipendio netto viene investito."
+    )
+    spese_mese = st.number_input(
+        "Spese Mensili Obiettivo in FIRE (€)", min_value=500, max_value=20_000, value=2_000, step=100,
+        help="Quanto vuoi spendere al mese dopo il ritiro (€ di oggi). Determina il capitale necessario."
+    )
 
     if is_germania:
         st.subheader("🏥 Sanità in Germania (PKV / GKV)")
@@ -284,6 +291,7 @@ cfg = SimulationConfig(
     ral=ral,
     aumento_ral_annuo_reale=crescita_ral_reale,
     spese_mese=spese_mese,
+    spese_mese_accumulo=float(spese_mese_accumulo),
     tipo_sanita_germania=tipo_sanita,
     costo_mensile_pkv_iniziale=float(costo_pkv_iniziale),
     costo_mensile_pkv_fire_nominale=float(costo_pkv_fire),
@@ -468,7 +476,7 @@ with col3:
 with col4:
     spese_annue_nom = cfg.spese_mese * 12
     st.metric(
-        "Spesa Annua Obiettivo",
+        "Spesa Annua Obiettivo in FIRE",
         f"{spese_annue_nom:,.0f} €/anno",
         f"{cfg.spese_mese:,.0f} €/mese"
     )
@@ -594,7 +602,7 @@ with tab3:
     idx_accesso = cfg.eta_pensione - cfg.eta_iniziale
 
     # Stipendio netto medio anno per anno durante l'accumulo
-    stipendio_netto_annuo = np.mean(risultati["depositi"] + risultati["spese"][:cfg.anni_acc, :], axis=1)
+    stipendio_netto_annuo = np.mean(risultati["depositi"] + risultati["spese"][:cfg.anni_acc, :] * cfg.rapporto_spese_accumulo, axis=1)
     ultimo_stipendio_netto = float(stipendio_netto_annuo[max(0, anno_sel_pensione - 1)]) if anno_sel_pensione > 0 else 0.0
     anni_gap_fire = max(0, cfg.eta_pensione - eta_fire)
 
@@ -627,6 +635,7 @@ with tab3:
 
     anni_x_vita = np.arange(cfg.eta_iniziale, cfg.eta_morte)
     spese_medie = np.mean(risultati["spese"], axis=1)
+    spese_medie[:anno_sel_pensione] *= cfg.rapporto_spese_accumulo  # mentre lavori si spende la cifra attuale
 
     curva_entrate_nette = np.zeros(len(anni_x_vita))
     if anno_sel_pensione > 0:

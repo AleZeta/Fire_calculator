@@ -207,7 +207,7 @@ def genera_report_pdf_fire(
             sp.set_color("#cbd5e1")
 
         spese_medie = np.mean(risultati["spese"], axis=1)
-        stipendio_netto = np.mean(risultati["depositi"] + risultati["spese"][:config.anni_acc, :], axis=1)
+        stipendio_netto = np.mean(risultati["depositi"] + risultati["spese"][:config.anni_acc, :] * config.rapporto_spese_accumulo, axis=1)
 
         ax_f1.plot(anni_x, spese_medie, label="Spese di Vita (Retirement Smile)", color="#0284c7", linewidth=2.5)
         if anno_acc_sel > 0:

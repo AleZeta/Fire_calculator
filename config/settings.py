@@ -44,6 +44,7 @@ class SimulationConfig:
     ral: float = 85_000.0
     aumento_ral_annuo_reale: float = 0.02  # Crescita reale annua della RAL (oltre inflazione)
     spese_mese: float = 2_000.0
+    spese_mese_accumulo: float = 0.0   # Spese mensili attuali mentre lavori (0 = uguali alla spesa obiettivo in FIRE)
 
     # Asset Allocation Differenziata: Accumulo vs FIRE (Decumulo)
     target_equity_accumulo: float = 0.80  # 80% Azionario durante il lavoro
@@ -154,6 +155,13 @@ class SimulationConfig:
     @property
     def prelievo_iniziale_annuo(self) -> float:
         return self.spese_mese * 12.0
+
+    @property
+    def rapporto_spese_accumulo(self) -> float:
+        """Spese mentre lavori rispetto alla spesa obiettivo in FIRE (1.0 se non indicata)."""
+        if self.spese_mese_accumulo <= 0.0 or self.spese_mese <= 0.0:
+            return 1.0
+        return self.spese_mese_accumulo / self.spese_mese
 
     def get_allocazione_anno(self, idx_t: int, anno_fire: int) -> Tuple[float, float]:
         """Restituisce le quote target (equity_ratio, bond_ratio) per l'anno idx_t dato l'anno di ritiro anno_fire."""

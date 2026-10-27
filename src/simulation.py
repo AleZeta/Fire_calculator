@@ -139,7 +139,7 @@ def calcola_depositi_e_tfr(
         inflazione_medica_extra=config.inflazione_medica_extra_annua,
         **parametri_fiscali
     )
-    depositi = netto - spese[:anni_acc, :]
+    depositi = netto - spese[:anni_acc, :] * config.rapporto_spese_accumulo
 
     tfr_maturato = np.zeros((anni_acc + 1, num_sim))
     if config.abilita_tfr and not config.is_germania:
