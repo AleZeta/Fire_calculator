@@ -43,6 +43,7 @@ def parametri_contributivi_config(config: SimulationConfig) -> Dict[str, Any]:
         "aliquota_pv": config.aliquota_pv_base,
         "supplemento_pv_senza_figli": config.supplemento_pv_senza_figli,
         "ha_figli": config.ha_figli,
+        "crescita_reale_tetti": config.pil_reale_medio,
     }
 
 
@@ -65,7 +66,11 @@ def ral_valida_pensione(config: SimulationConfig, ral_infl: np.ndarray, fattore_
     """RAL su cui maturano gli Entgeltpunkte: la parte di bAV esente da contributi non genera punti GRV."""
     if not bav_attiva(config):
         return ral_infl
-    tetto = QUOTA_BAV_ESENTE_CONTRIBUTI * TETTO_RV_AV_2026 * fattore_infl[:config.anni_acc, :]
+    anni_col = np.arange(config.anni_acc)[:, np.newaxis]
+    tetto = (
+        QUOTA_BAV_ESENTE_CONTRIBUTI * TETTO_RV_AV_2026 * fattore_infl[:config.anni_acc, :]
+        * ((1.0 + config.pil_reale_medio) ** anni_col)
+    )
     datore = contributi_bav_annui(config, fattore_infl) * config.bav_contributo_datore
     return ral_infl - np.minimum(contributi_bav_annui(config, fattore_infl), np.maximum(0.0, tetto - datore))
 

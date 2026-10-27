@@ -43,6 +43,15 @@ def test_tariffa_32a_punti_noti():
     assert einkommensteuer_32a(np.array([50_000.0]))[0] < einkommensteuer_32a(np.array([60_000.0]))[0]
 
 
+def test_tetti_crescono_con_i_salari_reali():
+    # dopo 10 anni con +1% reale i tetti sono 1,01^10 più alti: la RV su una RAL alta cresce di conseguenza
+    ral, f = np.array([300_000.0]), np.array([1.0])
+    senza = calcola_dettaglio_tasse_germania(ral, f, tipo_sanita="GKV", anno=10)
+    con = calcola_dettaglio_tasse_germania(ral, f, tipo_sanita="GKV", anno=10, crescita_reale_tetti=0.01)
+    assert abs(senza["rv"][0] - 101_400 * 0.093) < 0.01
+    assert abs(con["rv"][0] - 101_400 * 1.01 ** 10 * 0.093) < 0.01
+
+
 if __name__ == "__main__":
     for nome, fn in list(globals().items()):
         if nome.startswith("test_"):
