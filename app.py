@@ -145,6 +145,7 @@ with st.sidebar.form("form_parametri_fire"):
 
     abilita_bav = False
     bav_mensile = 0.0
+    bav_contributo_datore = 0.0
     if is_germania:
         abilita_bav = st.checkbox(
             "Includi Pensione Aziendale (Direktversicherung)",
@@ -156,6 +157,11 @@ with st.sidebar.form("form_parametri_fire"):
                 "Versamento Mensile Direktversicherung (€ lordi)",
                 min_value=0.0, max_value=1_500.0, value=200.0, step=25.0
             )
+            bav_contributo_datore = st.number_input(
+                "Contributo Datore sulla Direktversicherung (% del tuo versamento)",
+                min_value=0.0, max_value=100.0, value=0.0, step=5.0,
+                help="Per legge il datore deve aggiungere il 15% se risparmia contributi sociali (§ 1a BetrAVG). Verifica con HR; 0 = prudente."
+            ) / 100.0
 
     st.subheader("📈 Asset Allocation & Mercati")
     scelta_azionario = st.selectbox(
@@ -244,6 +250,7 @@ cfg = SimulationConfig(
     inflazione_medica_extra_annua=float(inflaz_medica),
     abilita_bav=abilita_bav,
     bav_mensile=float(bav_mensile),
+    bav_contributo_datore=float(bav_contributo_datore),
     nome_dataset_azionario=nome_azionario,
     target_equity_accumulo=eq_acc,
     target_bond_accumulo=bd_acc,

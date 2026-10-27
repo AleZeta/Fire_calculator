@@ -51,7 +51,8 @@ def calcola_dettaglio_tasse_germania(
     aliquota_pv: float = 0.018,
     supplemento_pv_senza_figli: float = 0.006,
     ha_figli: bool = False,
-    bav_annuo: Union[float, np.ndarray] = 0.0
+    bav_annuo: Union[float, np.ndarray] = 0.0,
+    bav_datore_annuo: Union[float, np.ndarray] = 0.0
 ) -> Dict[str, np.ndarray]:
     """
     Restituisce il dettaglio disaggregato (vettorizzato 1D o 2D) delle singole voci fiscali e sanitarie in Germania
@@ -61,13 +62,17 @@ def calcola_dettaglio_tasse_germania(
     3. Solidaritätszuschlag con Milderungszone (§ 4 SolzG).
     Con Direktversicherung (bav_annuo, Entgeltumwandlung) l'imponibile fiscale scende fino all'8% della BBG e
     quello contributivo fino al 4%; il versamento non rientra in "totale" (è risparmio, non trattenuta).
+    I limiti valgono sul totale dei versamenti: il contributo del datore (bav_datore_annuo) ne occupa una parte.
     """
     tetto_rv_av = TETTO_RV_AV_2026 * fattore_inflazione
     tetto_kv_pv = TETTO_KV_PV_2026 * fattore_inflazione
 
     bav = np.asarray(bav_annuo, dtype=float) * np.ones_like(ral)
-    bav_esente_tasse = np.minimum(bav, QUOTA_BAV_ESENTE_TASSE * tetto_rv_av)
-    bav_esente_contributi = np.minimum(bav, QUOTA_BAV_ESENTE_CONTRIBUTI * tetto_rv_av)
+    bav_datore = np.asarray(bav_datore_annuo, dtype=float)
+    bav_esente_tasse = np.minimum(bav, np.maximum(0.0, QUOTA_BAV_ESENTE_TASSE * tetto_rv_av - bav_datore))
+    bav_esente_contributi = np.minimum(
+        bav, np.maximum(0.0, QUOTA_BAV_ESENTE_CONTRIBUTI * tetto_rv_av - bav_datore)
+    )
     ral_fiscale = ral - bav_esente_tasse
     ral = ral - bav_esente_contributi  # base contributiva
 

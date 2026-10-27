@@ -34,6 +34,18 @@ def test_bav_non_cambia_il_caso_senza_versamento():
     assert abs(_det(0.0)["lohnsteuer"][0] / 12 - 1_162.50) < 0.01
 
 
+def test_contributo_datore_occupa_parte_del_limite():
+    # il datore versa 2.000 €: restano 2.056 € di esenzione contributiva (4% BBG) per il dipendente
+    det = calcola_dettaglio_tasse_germania(RAL, F1, tipo_sanita="GKV", bav_annuo=4_056.0, bav_datore_annuo=2_000.0)
+    assert abs(det["rv"][0] - (75_000 - 2_056) * 0.093) < 0.01
+
+
+def test_datore_zero_equivale_a_nessun_contributo():
+    a = _det(3_000.0)
+    b = calcola_dettaglio_tasse_germania(RAL, F1, tipo_sanita="GKV", bav_annuo=3_000.0, bav_datore_annuo=0.0)
+    assert a["lohnsteuer"][0] == b["lohnsteuer"][0] and a["rv"][0] == b["rv"][0]
+
+
 if __name__ == "__main__":
     for nome, fn in list(globals().items()):
         if nome.startswith("test_"):

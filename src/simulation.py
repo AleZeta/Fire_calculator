@@ -56,12 +56,18 @@ def contributi_bav_annui(config: SimulationConfig, fattore_infl: np.ndarray) -> 
     return config.bav_mensile * 12.0 * fattore_infl[:config.anni_acc, :]
 
 
+def contributi_bav_totali(config: SimulationConfig, fattore_infl: np.ndarray) -> np.ndarray:
+    """Versamento complessivo nel contratto: quota del dipendente + contributo del datore."""
+    return contributi_bav_annui(config, fattore_infl) * (1.0 + config.bav_contributo_datore)
+
+
 def ral_valida_pensione(config: SimulationConfig, ral_infl: np.ndarray, fattore_infl: np.ndarray) -> np.ndarray:
     """RAL su cui maturano gli Entgeltpunkte: la parte di bAV esente da contributi non genera punti GRV."""
     if not bav_attiva(config):
         return ral_infl
     tetto = QUOTA_BAV_ESENTE_CONTRIBUTI * TETTO_RV_AV_2026 * fattore_infl[:config.anni_acc, :]
-    return ral_infl - np.minimum(contributi_bav_annui(config, fattore_infl), tetto)
+    datore = contributi_bav_annui(config, fattore_infl) * config.bav_contributo_datore
+    return ral_infl - np.minimum(contributi_bav_annui(config, fattore_infl), np.maximum(0.0, tetto - datore))
 
 
 def aggiungi_pensione_bav(
@@ -117,6 +123,7 @@ def calcola_depositi_e_tfr(
     parametri_fiscali = parametri_contributivi_config(config)
     if bav_attiva(config):
         parametri_fiscali["bav_annuo"] = contributi_bav_annui(config, fattore_infl)
+        parametri_fiscali["bav_datore_annuo"] = parametri_fiscali["bav_annuo"] * config.bav_contributo_datore
     netto = calcola_stipendio_netto_automatico(
         ral=ral_infl,
         paese=config.paese,
@@ -496,7 +503,7 @@ def esegui_simulazione_completa(
 
     capitale_bav = None
     if bav_attiva(config):
-        capitale_bav = calcola_capitale_bav(contributi_bav_annui(config, cum_infl), inflazione, config.bav_rendimento_reale)
+        capitale_bav = calcola_capitale_bav(contributi_bav_totali(config, cum_infl), inflazione, config.bav_rendimento_reale)
     ral_pens = ral_valida_pensione(config, ral_infl, cum_infl)
 
     capitale_vita = []
@@ -673,7 +680,7 @@ def simula_stress_test_storico(
         }
 
     if bav_attiva(cfg_1):
-        cap_bav = calcola_capitale_bav(contributi_bav_annui(cfg_1, cum_infl), infl, cfg_1.bav_rendimento_reale)
+        cap_bav = calcola_capitale_bav(contributi_bav_totali(cfg_1, cum_infl), infl, cfg_1.bav_rendimento_reale)
         p_det = aggiungi_pensione_bav(p_det, cfg_1, anni_accumulo, cap_bav, infl)
 
     cap_eq_start = cap_eq_acc[anni_accumulo, :].copy()
@@ -738,7 +745,7 @@ def esegui_analisi_sensitivita_strategie(
         spese_s = calcola_curva_spese_dinamica(c_s, inf_sub)
         depositi_s, ral_infl_s, tfr_s = calcola_depositi_e_tfr(c_s, inf_sub, spese_s, cum_infl)
         cap_bav_s = (
-            calcola_capitale_bav(contributi_bav_annui(c_s, cum_infl), inf_sub, c_s.bav_rendimento_reale)
+            calcola_capitale_bav(contributi_bav_totali(c_s, cum_infl), inf_sub, c_s.bav_rendimento_reale)
             if bav_attiva(c_s) else None
         )
         ral_pens_s = ral_valida_pensione(c_s, ral_infl_s, cum_infl)

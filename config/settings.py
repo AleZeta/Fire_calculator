@@ -77,6 +77,7 @@ class SimulationConfig:
 
     # Pensione aziendale (Direktversicherung, solo Germania): Entgeltumwandlung dallo stipendio lordo
     abilita_bav: bool = False
+    bav_contributo_datore: float = 0.0      # Contributo del datore in % del versamento del dipendente (obbligatorio 15% se risparmia SV)
     bav_mensile: float = 200.0              # Versamento lordo mensile (€ odierni, indicizzato all'inflazione)
     bav_rendimento_reale: float = 0.01      # Rendimento reale annuo del contratto (oltre l'inflazione)
     bav_coeff_rendita: float = 0.036        # Rendita annua lorda per € di capitale all'età di pensione
