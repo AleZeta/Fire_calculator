@@ -31,6 +31,29 @@ def carica_dataset_sincrono_eur(config: SimulationConfig) -> pd.DataFrame:
     return _leggi_csv_sincrono_cached(str(csv_file.resolve()))
 
 
+def _usa_msci_world(config: SimulationConfig) -> bool:
+    return config.nome_dataset_azionario.lower() in ("msci_world", "world", "urth")
+
+
+def _genera_normale(
+    serie_stock: np.ndarray,
+    serie_bond: np.ndarray,
+    serie_infl: np.ndarray,
+    durata: int,
+    num_sim: int
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Rendimenti annuali normali multivariati (azioni, obbligazioni, inflazione) con media, volatilità e
+    correlazioni stimate sul campione storico. Niente autocorrelazione né code spesse.
+    """
+    dati = np.column_stack((serie_stock, serie_bond, serie_infl))
+    estrazioni = np.random.multivariate_normal(dati.mean(axis=0), np.cov(dati, rowvar=False), size=(durata - 1, num_sim))
+    azioni = np.maximum(estrazioni[:, :, 0], -0.95)
+    obbligazioni = np.maximum(estrazioni[:, :, 1], -0.95)
+    inflazione = np.maximum(estrazioni[:, :, 2], -0.02)
+    return azioni, obbligazioni, inflazione
+
+
 def genera_matrici_multiasset_sincrone(
     config: SimulationConfig
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -48,13 +71,20 @@ def genera_matrici_multiasset_sincrone(
     num_sim = config.num_simulazioni
     num_anni_blocco = config.anni_blocco_rendimenti
 
-    is_world = config.nome_dataset_azionario.lower() in ("msci_world", "world", "urth")
-    col_stock = "msci_world_eur" if is_world else "sp500_eur"
+    col_stock = "msci_world_eur" if _usa_msci_world(config) else "sp500_eur"
     serie_stock = df[col_stock].to_numpy()
     serie_bond = df["bund_10y_tr_eur"].to_numpy()
 
     col_infl = "inflation_germany" if config.is_germania else "inflation_italy"
     serie_infl = df[col_infl].to_numpy()
+
+    if config.modello_mercato.lower() == "normale":
+        r_eq, r_bd, r_infl = _genera_normale(serie_stock, serie_bond, serie_infl, durata, num_sim)
+        md_eq = np.ones((durata, num_sim))
+        md_bd = np.ones((durata, num_sim))
+        infl = np.zeros((durata, num_sim))
+        md_eq[1:, :], md_bd[1:, :], infl[1:, :] = 1.0 + r_eq, 1.0 + r_bd, r_infl
+        return np.cumprod(md_eq, axis=0), md_eq, md_bd, infl
 
     n_osservazioni = len(df)
     upper_bound = max(1, n_osservazioni - num_anni_blocco)

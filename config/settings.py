@@ -87,6 +87,7 @@ class SimulationConfig:
 
     # Campionamento Sincrono Triadi (Joint Vector Block Bootstrap: Stock EUR + Bond EUR + Inflazione Locale)
     usa_campionamento_sincrono: bool = True
+    modello_mercato: str = "storico"      # 'storico' (blocchi) oppure 'normale' (media, volatilità e correlazioni storiche)
     abilita_tfr: bool = False           # False in Germania; True in Italia
     aliquota_accantonamento_tfr: float = 0.0691  # 6.91% della RAL annua
     tassazione_separata_tfr: float = 0.23

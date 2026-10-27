@@ -171,11 +171,15 @@ with st.sidebar.form("form_parametri_fire"):
     )
     nome_azionario = "msci_world" if "MSCI" in scelta_azionario else "sp500"
 
-    usa_sincrono = st.checkbox(
-        "Campionamento Sincrono Triadi (Stock EUR + Bund 10Y TR + Inflazione Locale)",
-        value=True,
-        help="Preserva le vere correlazioni macroeconomiche (es. shock 1973-74 e 2022 dove bond e stock scendono insieme all'aumento dei prezzi)."
+    scelta_modello = st.selectbox(
+        "Modello di Mercato",
+        options=["Storico a blocchi (consigliato)", "Normale (media, volatilità e correlazioni storiche)"],
+        index=0,
+        help="Storico: estrae blocchi di anni reali (azioni, bond e inflazione insieme: preserva shock come 1973-74 e 2022). "
+             "Normale: rendimenti gaussiani con media, volatilità e correlazioni stimate sullo storico; più liscio, senza code spesse né sequenze."
     )
+    modello_mercato = "normale" if "Normale" in scelta_modello else "storico"
+    usa_sincrono = True
 
     durata_blocco = st.select_slider(
         "Durata Blocchi Temporali (Anni)",
@@ -268,6 +272,7 @@ cfg = SimulationConfig(
     usa_curva_spese_smile=usa_smile,
     usa_guardrails_spesa=usa_guardrails,
     usa_campionamento_sincrono=usa_sincrono,
+    modello_mercato=modello_mercato,
     anni_blocco_rendimenti=int(durata_blocco),
     usa_bond_tent=usa_bond_tent
 )
@@ -292,7 +297,7 @@ st.sidebar.caption(
 
 # ----------------- CACHING A DUE LIVELLI & STATO SESSIONE -----------------
 @st.cache_data(show_spinner="Caricamento serie storiche e matrici di mercato...")
-def get_dati_mercato(num_sim: int, eta_iniziale: int, eta_morte: int, ticker_az: str, paese: str, anni_blocco: int, usa_sincrono_flag: bool):
+def get_dati_mercato(num_sim: int, eta_iniziale: int, eta_morte: int, ticker_az: str, paese: str, anni_blocco: int, usa_sincrono_flag: bool, modello: str):
     dummy_cfg = SimulationConfig(
         num_simulazioni=num_sim,
         eta_iniziale=eta_iniziale,
@@ -300,7 +305,8 @@ def get_dati_mercato(num_sim: int, eta_iniziale: int, eta_morte: int, ticker_az:
         nome_dataset_azionario=ticker_az,
         paese=paese,
         anni_blocco_rendimenti=anni_blocco,
-        usa_campionamento_sincrono=usa_sincrono_flag
+        usa_campionamento_sincrono=usa_sincrono_flag,
+        modello_mercato=modello
     )
     if usa_sincrono_flag:
         return genera_matrici_multiasset_sincrone(dummy_cfg)
@@ -330,7 +336,8 @@ if "sim_data" not in st.session_state or submit_btn:
             cfg.nome_dataset_azionario,
             cfg.paese,
             cfg.anni_blocco_rendimenti,
-            cfg.usa_campionamento_sincrono
+            cfg.usa_campionamento_sincrono,
+            cfg.modello_mercato
         )
         risultati = calcola_simulazione_fire(cfg, m_eq, md_eq, md_bond, inflazione)
         f_infl_media = np.mean(np.cumprod(1.0 + inflazione, axis=0), axis=1)
