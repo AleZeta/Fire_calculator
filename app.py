@@ -520,12 +520,13 @@ def _cached_heatmap_wd(wd_data_matrix, x_labels, y_labels):
 
 
 # ----------------- TABS CON GRAFICI (5 Tab Principali) -----------------
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🎯 Heatmap (Successo & SWR)",
     "📈 Evoluzione Patrimonio & Stress Test",
     "🏛️ Spese e Pensioni UE (GRV + INPS)",
     "🔬 Analisi di Sensitività Strategie",
-    "📥 Riepilogo & Esportazione Piano"
+    "📥 Riepilogo & Esportazione Piano",
+    "📖 Guida ai Campi"
 ])
 
 with tab1:
@@ -1081,3 +1082,67 @@ with tab5:
         "Tutti i valori monetari sono espressi in euro nominali dell'anno di riferimento (inclusivi di inflazione cumulata)."
     )
     st.dataframe(df_summary, use_container_width=True, height=520)
+
+with tab6:
+    st.markdown("### 📖 Guida ai Campi e ai Risultati")
+    st.caption("Cosa significa ogni campo della barra laterale e come leggere i risultati. Tutti gli importi sono in € di oggi, indicizzati all'inflazione dello scenario simulato.")
+
+    with st.expander("💶 Reddito e Spese", expanded=True):
+        st.markdown(
+            "- **RAL Iniziale:** stipendio lordo annuo di oggi. Cresce ogni anno con l'inflazione più la *Crescita Reale Annua*.\n"
+            "- **Spese Mensili Attuali:** quanto spendi al mese mentre lavori. **Quello che investi ogni anno = stipendio netto − spese attuali** "
+            "(non c'è un campo \"risparmio mensile\": è il risultato).\n"
+            "- **Spese Mensili Obiettivo in FIRE:** quanto vuoi spendere dopo il ritiro. Determina il capitale necessario.\n"
+            "- **Capitale Iniziale:** patrimonio già investito oggi.\n"
+            "- **Curva Spese Dinamica (Retirement Smile):** le spese reali non sono piatte. Il modello usa 100% fino a 55 anni, 88% tra 55 e 75 "
+            "(si viaggia e si spende meno col passare degli anni) e 105% oltre i 75 (sanità e assistenza). Disattivandola le spese restano costanti."
+        )
+    with st.expander("🏛️ Carriera, Profilo e Pensioni"):
+        st.markdown(
+            "- **Anni già lavorati in Italia / Germania:** servono per la pensione. I periodi in paesi UE diversi si sommano per i requisiti minimi.\n"
+            "- **Età Pensione Canonica:** da quando arrivano la pensione tedesca (GRV) e italiana (INPS).\n"
+            "- **Orizzonte Massimo:** età fino a cui il capitale deve durare. Il successo è la quota di scenari in cui il patrimonio non si esaurisce prima.\n"
+            "- **Anni Futuri di Accumulo Testati:** fino a quanti anni di lavoro da oggi vengono provate le età di ritiro FIRE.\n"
+            "- **Includi Pensioni Pubbliche:** se disattivato, il piano si regge solo sul portafoglio."
+        )
+    with st.expander("🏥 Sanità in Germania (PKV / GKV)"):
+        st.markdown(
+            "- **GKV:** assicurazione pubblica, contributo in percentuale sullo stipendio. **PKV:** assicurazione privata con premio fisso a tuo carico.\n"
+            "- **Costo PKV in FIRE:** senza datore di lavoro paghi il premio intero fino ai 67 anni.\n"
+            "- **Crescita Reale Premi PKV:** i premi privati salgono più dell'inflazione (storicamente circa +1% l'anno)."
+        )
+    with st.expander("💼 Pensione Aziendale (Direktversicherung / bAV)"):
+        st.markdown(
+            "- **Versamento Mensile:** la *tua* parte lorda, tolta dallo stipendio prima di tasse e contributi. Ha vantaggio fiscale fino all'8% della BBG "
+            "e vantaggio anche sui contributi sociali fino al 4%.\n"
+            "- **Contributo Datore (%):** quota che aggiunge l'azienda, in percentuale del tuo versamento. Il totale nel contratto è tuo versamento + contributo.\n"
+            "- **Rendimento Reale:** crescita annua oltre l'inflazione, al netto dei costi. Circa 3–4% per un fondo azionario, 0–1% per una garanzia pura.\n"
+            "- Il capitale resta bloccato fino alla pensione e la rendita è tassata (imposta sul reddito più contributi sanitari). Dopo il FIRE i versamenti si fermano."
+        )
+    with st.expander("📈 Asset Allocation & Mercati"):
+        st.markdown(
+            "- **Indice Azionario:** MSCI World o S&P 500, in EUR. Le obbligazioni sono il Bund tedesco a 10 anni.\n"
+            "- **Modello di Mercato:** *Storico a blocchi* pesca blocchi di anni reali (azioni, bond e inflazione insieme) e conserva shock come il 1973 e il 2022. "
+            "*Normale* usa rendimenti casuali con media, volatilità e correlazioni dello storico: più liscio, senza crisi estreme.\n"
+            "- **Durata Blocchi:** quanti anni consecutivi reali vengono pescati insieme.\n"
+            "- **% Mercati Emergenti:** quota di emergenti dentro la parte azionaria (se i dati sono disponibili). Accorcia il periodo storico: "
+            "non confrontare un risultato con emergenti con uno senza.\n"
+            "- **% Azioni Accumulo / FIRE:** il resto è obbligazionario.\n"
+            "- **Glidepath (Bond Tent):** aumenta le obbligazioni intorno al FIRE per ridurre il rischio di crolli nei primi anni di prelievo.\n"
+            "- **TER ETF:** costo annuo del fondo. **Sparer-Pauschbetrag / Bollo / Capital Gain / TFR:** fiscalità sui rendimenti del paese scelto."
+        )
+    with st.expander("🛡️ Opzioni Decumulo"):
+        st.markdown(
+            "- **Cash Buffer (anni di spese):** liquidità tenuta da parte per non vendere in un mercato in calo.\n"
+            "- **Safe Withdrawal Rate Benchmark:** soglia di prelievo (in % del patrimonio) usata dalla seconda heatmap.\n"
+            "- **Guardrails:** se il prelievo supera il 5% del patrimonio, o supera il 4% in un anno di mercato in calo, la spesa di quell'anno viene tagliata del 10%.\n"
+            "- **Numero di Scenari:** più scenari = risultati più stabili ma più lenti."
+        )
+    with st.expander("🎯 Come leggere i risultati"):
+        st.markdown(
+            "- **Probabilità Capitale > 0 a 100 anni:** quota di scenari in cui il patrimonio non finisce prima dell'orizzonte. 99% = 1 scenario su 100 fallisce.\n"
+            "- **Età FIRE minima (≥ 99%):** la prima età di ritiro che raggiunge quel 99%. È il numero migliore per confrontare due scelte: se scende, la scelta migliora.\n"
+            "- **Patrimonio al FIRE:** valore mediano accumulato all'età scelta.\n"
+            "- Cambia **un solo input alla volta** e ignora differenze sotto circa 1 punto percentuale: sono rumore della simulazione.\n"
+            "- Non è un consiglio finanziario: è un modello basato su dati storici."
+        )
