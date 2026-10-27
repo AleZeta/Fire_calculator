@@ -10,6 +10,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 OUTPUT_DIR = BASE_DIR / "output"
 
+# Parametri contributivi Germania 2026 (€/anno, indicizzati all'inflazione nelle simulazioni)
+TETTO_RV_AV_2026 = 101_400.0   # Beitragsbemessungsgrenze RV/AV
+TETTO_KV_PV_2026 = 69_750.0    # Beitragsbemessungsgrenze KV/PV
+
 
 @dataclass
 class SimulationConfig:
@@ -60,6 +64,11 @@ class SimulationConfig:
     # Trattamento Sanitario (Assicurazione Malattia / Pflegeversicherung in Germania)
     tipo_sanita_germania: str = "PKV"   # 'PKV' (Privata) oppure 'GKV' (Pubblica)
     costo_mensile_pkv_iniziale: float = 400.0  # Quota a carico lavoratore oggi (€/mese, oltre al contributo datore)
+    # Contributi GKV/PV a carico del dipendente (2026)
+    aliquota_kv_dipendente: float = 0.08645  # 7,3% + metà del contributo aggiuntivo medio (2,69% / 2)
+    aliquota_pv_base: float = 0.018          # Pflegeversicherung quota dipendente
+    supplemento_pv_senza_figli: float = 0.006  # Kinderlosenzuschlag
+    ha_figli: bool = False                   # Se False si applica il supplemento PV
     inflazione_medica_extra_annua: float = 0.01  # Crescita reale dei premi sanitari oltre l'inflazione (+1%/anno)
     costo_mensile_pkv_fire_nominale: float = 780.0  # Quota a carico in FIRE prima dei 67 anni senza datore di lavoro (€/mese odierni)
     costo_mensile_gkv_fire_nominale: float = 450.0  # Quota volontaria GKV in FIRE prima dei 67 anni (€/mese odierni)

@@ -31,6 +31,16 @@ def calcola_curva_spese_dinamica(
     return spese
 
 
+def parametri_contributivi_config(config: SimulationConfig) -> Dict[str, Any]:
+    """Parametri contributivi GKV/PV della configurazione, passati alle funzioni fiscali tedesche."""
+    return {
+        "aliquota_kv": config.aliquota_kv_dipendente,
+        "aliquota_pv": config.aliquota_pv_base,
+        "supplemento_pv_senza_figli": config.supplemento_pv_senza_figli,
+        "ha_figli": config.ha_figli,
+    }
+
+
 def calcola_depositi_e_tfr(
     config: SimulationConfig,
     inflazione: np.ndarray,
@@ -61,7 +71,8 @@ def calcola_depositi_e_tfr(
         tipo_sanita=config.tipo_sanita_germania,
         costo_mensile_pkv=config.costo_mensile_pkv_iniziale,
         anno=anni_col,
-        inflazione_medica_extra=config.inflazione_medica_extra_annua
+        inflazione_medica_extra=config.inflazione_medica_extra_annua,
+        **parametri_contributivi_config(config)
     )
     depositi = netto - spese[:anni_acc, :]
 

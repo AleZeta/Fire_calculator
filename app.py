@@ -30,6 +30,7 @@ from src.simulation import (
     esegui_simulazione_completa,
     simula_stress_test_storico,
     esegui_analisi_sensitivita_strategie,
+    parametri_contributivi_config,
 )
 from src.taxes import (
     calcola_stipendio_netto_automatico,
@@ -256,7 +257,8 @@ netto_stimato_anno0 = float(calcola_stipendio_netto_automatico(
     tipo_sanita=tipo_sanita,
     costo_mensile_pkv=costo_pkv_iniziale,
     anno=0,
-    inflazione_medica_extra=inflaz_medica
+    inflazione_medica_extra=inflaz_medica,
+    **parametri_contributivi_config(cfg)
 )[0])
 aliquota_effettiva_stimata = (1.0 - netto_stimato_anno0 / ral) * 100.0
 st.sidebar.caption(
@@ -671,7 +673,8 @@ with tab3:
                 tipo_sanita=cfg.tipo_sanita_germania,
                 costo_mensile_pkv_base=cfg.costo_mensile_pkv_iniziale,
                 anno=np.arange(anno_sel_pensione),
-                inflazione_medica_extra=cfg.inflazione_medica_extra_annua
+                inflazione_medica_extra=cfg.inflazione_medica_extra_annua,
+                **parametri_contributivi_config(cfg)
             )
             serie_sanita[:anno_sel_pensione] = det["sanita"]
             serie_rv_ivs[:anno_sel_pensione] = det["rv"]

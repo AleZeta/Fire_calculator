@@ -3,6 +3,37 @@
 from typing import Union, Dict
 import numpy as np
 
+from config.settings import TETTO_RV_AV_2026, TETTO_KV_PV_2026
+
+
+# Parametri fiscali Germania 2026 (valori nominali odierni, indicizzati con il fattore di inflazione)
+GRUNDFREIBETRAG_2026 = 12_348.0
+WERBUNGSKOSTEN_PAUSCHALE_2026 = 1_230.0
+SONDERAUSGABEN_PAUSCHALE_2026 = 36.0
+SOLI_FREIGRENZE_2026 = 20_350.0
+ALIQUOTA_RV = 0.093
+ALIQUOTA_AV = 0.013
+# Nella Vorsorgepauschale la quota KV esclude lo 0,3% (metà del 0,6% per il Krankengeld)
+ESCLUSIONE_KRANKENGELD_KV = 0.003
+
+
+def einkommensteuer_32a(zve: np.ndarray) -> np.ndarray:
+    """Imposta sul reddito (Grundtarif § 32a EStG 2026) su un reddito imponibile annuo già deflazionato; reddito e imposta sono arrotondati per difetto all'euro."""
+    x = np.floor(np.maximum(zve, 0.0))
+    y = (np.clip(x, 12_348.0, 17_799.0) - 12_348.0) / 10_000.0
+    z = (np.clip(x, 17_799.0, 69_878.0) - 17_799.0) / 10_000.0
+    zona1 = (914.51 * y + 1_400.0) * y
+    zona2 = (173.10 * z + 2_397.0) * z + 1_034.87
+    zona3 = 0.42 * x - 11_135.63
+    zona4 = 0.45 * x - 19_470.38
+    imposta = np.where(
+        x <= 12_348.0, 0.0,
+        np.where(x <= 17_799.0, zona1,
+                 np.where(x <= 69_878.0, zona2,
+                          np.where(x <= 277_825.0, zona3, zona4)))
+    )
+    return np.floor(imposta)  # § 32a: importo arrotondato per difetto all'euro intero
+
 
 def calcola_dettaglio_tasse_germania(
     ral: np.ndarray,
@@ -10,19 +41,25 @@ def calcola_dettaglio_tasse_germania(
     tipo_sanita: str = "PKV",
     costo_mensile_pkv_base: float = 400.0,
     anno: Union[int, np.ndarray] = 0,
-    inflazione_medica_extra: float = 0.01
+    inflazione_medica_extra: float = 0.01,
+    aliquota_kv: float = 0.08645,
+    aliquota_pv: float = 0.018,
+    supplemento_pv_senza_figli: float = 0.006,
+    ha_figli: bool = False
 ) -> Dict[str, np.ndarray]:
     """
-    Restituisce il dettaglio disaggregato (vettorizzato 1D o 2D) delle singole voci fiscali e sanitarie in Germania:
-    1. Contributi sociali dipendente (Sozialabgaben): RV (9.3%) + AV (1.3%), KV/PV o premio PKV.
-    2. Imposta progressiva sul reddito (Lohnsteuer) + Solidaritätszuschlag con Milderungszone (§ 4 SolzG).
+    Restituisce il dettaglio disaggregato (vettorizzato 1D o 2D) delle singole voci fiscali e sanitarie in Germania
+    (Steuerklasse 1, senza imposta ecclesiastica), parametri 2026:
+    1. Contributi dipendente: RV 9.3% + AV 1.3% (tetto 101.400 €), KV/PV su tetto 69.750 €.
+    2. Lohnsteuer con tariffa progressiva § 32a EStG su imponibile = RAL - Pauschbeträge - Vorsorgepauschale.
+    3. Solidaritätszuschlag con Milderungszone (§ 4 SolzG).
     """
-    tetto_rv_av = 90_600.0 * fattore_inflazione
-    tetto_kv_pv = 62_100.0 * fattore_inflazione
+    tetto_rv_av = TETTO_RV_AV_2026 * fattore_inflazione
+    tetto_kv_pv = TETTO_KV_PV_2026 * fattore_inflazione
 
     ral_capped_rv = np.minimum(ral, tetto_rv_av)
-    quota_rv = ral_capped_rv * 0.093
-    quota_av = ral_capped_rv * 0.013
+    quota_rv = ral_capped_rv * ALIQUOTA_RV
+    quota_av = ral_capped_rv * ALIQUOTA_AV
     contributi_previdenziali = quota_rv + quota_av
 
     if tipo_sanita.upper() == "PKV":
@@ -33,21 +70,20 @@ def calcola_dettaglio_tasse_germania(
         quota_pv = np.zeros_like(quota_kv)
     else:
         ral_capped_kv = np.minimum(ral, tetto_kv_pv)
-        quota_kv = ral_capped_kv * 0.0815
-        quota_pv = ral_capped_kv * 0.022
+        aliquota_pv_tot = aliquota_pv + (0.0 if ha_figli else supplemento_pv_senza_figli)
+        quota_kv = ral_capped_kv * aliquota_kv
+        quota_pv = ral_capped_kv * aliquota_pv_tot
         costo_sanita_lavoratore = quota_kv + quota_pv
-        quota_sanitaria_deducibile = costo_sanita_lavoratore
+        # Vorsorgepauschale: la quota KV deducibile esclude la componente Krankengeld
+        quota_sanitaria_deducibile = (
+            ral_capped_kv * (aliquota_kv - ESCLUSIONE_KRANKENGELD_KV) + quota_pv
+        )
 
-    imponibile = np.maximum(0.0, ral - contributi_previdenziali - quota_sanitaria_deducibile)
-    no_tax_area = 11_784.0 * fattore_inflazione
-    reddito_tassabile = np.maximum(0.0, imponibile - no_tax_area)
+    pauschbetraege = (WERBUNGSKOSTEN_PAUSCHALE_2026 + SONDERAUSGABEN_PAUSCHALE_2026) * fattore_inflazione
+    imponibile = np.maximum(0.0, ral - pauschbetraege - quota_rv - quota_sanitaria_deducibile)
+    imposta_base = einkommensteuer_32a(imponibile / fattore_inflazione) * fattore_inflazione
 
-    soglia_top = 66_760.0 * fattore_inflazione
-    parte_media = np.clip(reddito_tassabile, 0.0, soglia_top)
-    parte_alta = np.maximum(0.0, reddito_tassabile - soglia_top)
-    imposta_base = (parte_media * 0.26) + (parte_alta * 0.42)
-
-    freigrenze_soli = 18_130.0 * fattore_inflazione
+    freigrenze_soli = SOLI_FREIGRENZE_2026 * fattore_inflazione
     eccedenza_soli = np.maximum(0.0, imposta_base - freigrenze_soli)
     soli = np.minimum(imposta_base * 0.055, eccedenza_soli * 0.119)
 
@@ -71,7 +107,8 @@ def calcola_netto_salario_germania(
     tipo_sanita: str = "PKV",
     costo_mensile_pkv_base: float = 400.0,
     anno: Union[int, np.ndarray] = 0,
-    inflazione_medica_extra: float = 0.01
+    inflazione_medica_extra: float = 0.01,
+    **parametri_contributivi
 ) -> np.ndarray:
     """Calcola lo stipendio netto annuo in Germania (Steuerklasse 1, dipendente) con PKV o GKV."""
     det = calcola_dettaglio_tasse_germania(
@@ -80,7 +117,8 @@ def calcola_netto_salario_germania(
         tipo_sanita=tipo_sanita,
         costo_mensile_pkv_base=costo_mensile_pkv_base,
         anno=anno,
-        inflazione_medica_extra=inflazione_medica_extra
+        inflazione_medica_extra=inflazione_medica_extra,
+        **parametri_contributivi
     )
     return np.maximum(0.0, ral - det["totale"])
 
@@ -132,7 +170,8 @@ def calcola_stipendio_netto_automatico(
     tipo_sanita: str = "PKV",
     costo_mensile_pkv: float = 400.0,
     anno: Union[int, np.ndarray] = 0,
-    inflazione_medica_extra: float = 0.01
+    inflazione_medica_extra: float = 0.01,
+    **parametri_contributivi
 ) -> np.ndarray:
     """Selettore unificato per il calcolo progressivo del salario netto (supporta array 1D e 2D)."""
     if paese.lower() in ("germania", "de", "germany"):
@@ -142,6 +181,7 @@ def calcola_stipendio_netto_automatico(
             tipo_sanita=tipo_sanita,
             costo_mensile_pkv_base=costo_mensile_pkv,
             anno=anno,
-            inflazione_medica_extra=inflazione_medica_extra
+            inflazione_medica_extra=inflazione_medica_extra,
+            **parametri_contributivi
         )
     return calcola_netto_salario_italia(ral, fattore_inflazione)
