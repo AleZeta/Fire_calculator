@@ -26,3 +26,6 @@ output/*.pdf
 .vscode/
 .idea/
 *.code-workspace
+
+# Dati MSCI con licenza: forniti dall'utente, non pubblicare
+data/msci_em_eur.csv

@@ -70,7 +70,8 @@ Fire_calculator/
 │   ├── visualization.py     # Fan chart in scala Symlog ed heatmap ad alto contrasto
 │   └── pdf_report.py        # Generatore dossier esecutivo PDF in 5 pagine A4 Landscape
 ├── data/
-│   └── historical_triads_eur.csv # Dataset sincronizzato 1970-2024 (Azioni, Bund 10Y TR, Inflazione)
+│   ├── historical_triads_eur.csv # Dataset sincronizzato 1970-2024 (Azioni, Bund 10Y TR, Inflazione)
+│   └── msci_em_eur.csv          # Opzionale, non versionato (dati MSCI): MSCI EM Net TR in EUR, colonne Year,msci_em_eur
 ├── output/                  # Cartella per report PDF esportati
 ├── app.py                   # Dashboard Web interattiva (Streamlit)
 ├── main.py                  # Script CLI per simulazioni e generazione PDF da terminale
