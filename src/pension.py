@@ -3,6 +3,8 @@
 from typing import Tuple, Dict, Any, Optional
 import numpy as np
 
+from config.settings import TETTO_RV_AV_2026
+
 
 COEFFICIENTI_TRASFORMAZIONE_ITALIA = {
     57: 0.04270, 58: 0.04378, 59: 0.04493, 60: 0.04615, 61: 0.04744,
@@ -41,7 +43,7 @@ def stima_imposte_pensione_germania(
     - Se GKV (KVdR): prelievo contributi sanitari e non autosufficienza (~11.5%).
     - Se PKV: nessun prelievo KVdR alla fonte; la DRV eroga il sussidio pubblico dell'8.15% (§ 106 SGB VI).
     """
-    grundfreibetrag = 11_784.0 * fattore_inflazione_cum
+    grundfreibetrag = 12_348.0 * fattore_inflazione_cum  # Grundfreibetrag 2026
     is_pkv = tipo_sanita.upper() == "PKV"
 
     if is_pkv:
@@ -90,9 +92,10 @@ def calcola_pensione_grv_germania_prorata(
     if fattore_infl is None:
         fattore_infl = np.cumprod(1.0 + inflazione, axis=0)
 
-    durchschnittsentgelt_base = 45_358.0
-    beitragsbemessungsgrenze_base = 90_600.0
-    rentenwert_annuo_base = 39.32 * 12.0
+    # Valori 2026: Durchschnittsentgelt provvisorio, BBG RV, Rentenwert dal 1.7.2026 (€/Entgeltpunkt/mese)
+    durchschnittsentgelt_base = 51_944.0
+    beitragsbemessungsgrenze_base = TETTO_RV_AV_2026
+    rentenwert_annuo_base = 42.52 * 12.0
 
     punti_totali = np.zeros(num_sim)
 
@@ -105,8 +108,10 @@ def calcola_pensione_grv_germania_prorata(
     # Anni futuri lavorati in Germania (calcolo vettorizzato 2D)
     if anni_futuri > 0:
         f_infl_sub = fattore_infl[:anni_futuri, :]
+        anni_col = np.arange(anni_futuri)[:, np.newaxis]
         tetto_sub = beitragsbemessungsgrenze_base * f_infl_sub
-        medio_sub = durchschnittsentgelt_base * f_infl_sub
+        # Il Durchschnittsentgelt cresce con inflazione + crescita reale dei salari
+        medio_sub = durchschnittsentgelt_base * f_infl_sub * ((1.0 + crescita_reale_salari) ** anni_col)
         ral_valida = np.minimum(ral_infl_serie[:anni_futuri, :], tetto_sub)
         punti_totali += np.sum(ral_valida / medio_sub, axis=0)
 
