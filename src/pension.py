@@ -134,13 +134,17 @@ def calcola_pensione_inps_italia_prorata(
     eta_iniziale: int,
     aliquota_ivs: float = 0.33,
     pil_reale: float = 0.008,
-    fattore_infl: Optional[np.ndarray] = None
+    fattore_infl: Optional[np.ndarray] = None,
+    ral_infl_serie: Optional[np.ndarray] = None,
+    anni_futuri_italia: int = 0
 ) -> Tuple[np.ndarray, int]:
     """
     Calcola la quota pro-rata italiana INPS (Legge Dini / Riforma Fornero con Totalizzazione UE):
     - Con Totalizzazione UE >= 20 anni: accesso a 67 anni.
     - Con Totalizzazione UE tra 5 e 19 anni: accesso a 71 anni.
     - Sotto i 5 anni UE totali: nessuna pensione.
+    Gli anni pregressi usano la RAL media storica; gli anni futuri lavorati in Italia usano la RAL simulata
+    (ral_infl_serie), con ogni versamento rivalutato solo dall'anno in cui viene effettuato.
     """
     num_sim = inflazione.shape[1]
     if anni_ue_totali < 5 or anni_italia_totali <= 0:
@@ -150,15 +154,27 @@ def calcola_pensione_inps_italia_prorata(
     if fattore_infl is None:
         fattore_infl = np.cumprod(1.0 + inflazione, axis=0)
 
-    versamento_base_annuo = min(ral_media_italia, 119_650.0) * aliquota_ivs
+    massimale = 119_650.0  # massimale contributivo, indicizzato all'inflazione
     anni_attesa = max(0, eta_accesso - eta_iniziale)
+    anni_pregressi_it = anni_italia_totali - anni_futuri_italia
 
+    crescita = 1.0 + inflazione[:anni_attesa, :] + pil_reale
     if anni_attesa > 0:
-        fattore_montante = np.prod(1.0 + inflazione[:anni_attesa, :] + pil_reale, axis=0)
+        fattore_montante = np.prod(crescita, axis=0)
     else:
         fattore_montante = np.ones(num_sim)
 
-    montante = (versamento_base_annuo * anni_italia_totali) * fattore_montante
+    versamento_pregresso = min(ral_media_italia, massimale) * aliquota_ivs
+    montante = (versamento_pregresso * anni_pregressi_it) * fattore_montante
+
+    n_fut = min(anni_futuri_italia, anni_attesa)
+    if n_fut > 0 and ral_infl_serie is not None:
+        base_contributiva = np.minimum(ral_infl_serie[:n_fut, :], massimale * fattore_infl[:n_fut, :])
+        # Rivalutazione dei versamenti di ciascun anno t fino alla decorrenza: prodotto dei tassi degli anni successivi
+        rivalutazione = fattore_montante[np.newaxis, :] / np.cumprod(crescita[:n_fut, :], axis=0)
+        montante = montante + np.sum(base_contributiva * aliquota_ivs * rivalutazione, axis=0)
+    elif anni_futuri_italia > 0:
+        montante = montante + (versamento_pregresso * anni_futuri_italia) * fattore_montante
     coeff = COEFFICIENTI_TRASFORMAZIONE_ITALIA.get(eta_accesso, 0.05723)
     pensione_lorda = montante * coeff
 
@@ -193,10 +209,12 @@ def calcola_pensione_totale_ue(
         anni_de_totali = anni_pregressi_germania + anni_lavoro_futuri
         anni_it_totali = anni_pregressi_italia
         anni_futuri_de = anni_lavoro_futuri
+        anni_futuri_it = 0
     else:
         anni_it_totali = anni_pregressi_italia + anni_lavoro_futuri
         anni_de_totali = anni_pregressi_germania
         anni_futuri_de = 0
+        anni_futuri_it = anni_lavoro_futuri
 
     anni_ue_totali = anni_de_totali + anni_it_totali
 
@@ -220,7 +238,9 @@ def calcola_pensione_totale_ue(
         inflazione=inflazione,
         eta_iniziale=eta_iniziale,
         pil_reale=pil_reale,
-        fattore_infl=fattore_infl
+        fattore_infl=fattore_infl,
+        ral_infl_serie=ral_infl_serie,
+        anni_futuri_italia=anni_futuri_it
     )
 
     return {
