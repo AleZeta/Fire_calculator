@@ -79,7 +79,7 @@ class SimulationConfig:
     abilita_bav: bool = False
     bav_contributo_datore: float = 0.0      # Contributo del datore in % del versamento del dipendente (obbligatorio 15% se risparmia SV)
     bav_mensile: float = 200.0              # Versamento lordo mensile (€ odierni, indicizzato all'inflazione)
-    bav_rendimento_reale: float = 0.01      # Rendimento reale annuo del contratto (oltre l'inflazione)
+    bav_rendimento_reale: float = 0.035     # Rendimento reale annuo del contratto (oltre l'inflazione): fondo azionario al netto dei costi
     bav_coeff_rendita: float = 0.036        # Rendita annua lorda per € di capitale all'età di pensione
     bav_rivalutazione_rendita: float = 0.01 # Rivalutazione annua nominale della rendita (Überschüsse)
     aliquota_imposta_bav_pensione: float = 0.22  # Imposta sul reddito sulla rendita (tassata per intero)
