@@ -53,6 +53,15 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Dati MSCI Emerging Markets: non versionati. Online arrivano dai Secrets di Streamlit Cloud (chiave msci_em_csv)
+# e vengono scritti in data/msci_em_eur.csv; in locale basta il file.
+_file_em = DATA_DIR / "msci_em_eur.csv"
+if not _file_em.exists():
+    try:
+        _file_em.write_text(st.secrets["msci_em_csv"].strip() + "\n", encoding="utf-8")
+    except Exception:
+        pass  # nessun secret configurato: l'app funziona senza lo slider degli emergenti
+
 st.title("🔥 FIRE Calculator — Simulatore Monte Carlo Avanzato")
 st.markdown(
     "Simulatore di Indipendenza Finanziaria e Ritiro Anticipato (**FIRE**) con modello multi-asset differenziato (Accumulo vs FIRE), "

@@ -71,7 +71,7 @@ Fire_calculator/
 │   └── pdf_report.py        # Generatore dossier esecutivo PDF in 5 pagine A4 Landscape
 ├── data/
 │   ├── historical_triads_eur.csv # Dataset sincronizzato 1970-2024 (Azioni, Bund 10Y TR, Inflazione)
-│   └── msci_em_eur.csv          # MSCI Emerging Markets Net TR in EUR 2001-2025 (colonne Year,msci_em_eur); abilita lo slider degli emergenti
+│   └── msci_em_eur.csv          # Opzionale, non versionato: MSCI EM Net TR in EUR (colonne Year,msci_em_eur); abilita lo slider degli emergenti
 ├── output/                  # Cartella per report PDF esportati
 ├── app.py                   # Dashboard Web interattiva (Streamlit)
 ├── main.py                  # Script CLI per simulazioni e generazione PDF da terminale
@@ -162,4 +162,4 @@ Per un'analisi teorica completa delle formule, delle scelte metodologiche, dei l
 
 ## ⚖️ Dati e uso
 Progetto personale e didattico, senza scopo commerciale: non è un consiglio finanziario e non è in vendita.
-I rendimenti annuali in `data/msci_em_eur.csv` derivano dall'indice MSCI Emerging Markets (net total return, EUR) come riportato da [Curvo](https://curvo.eu); l'indice è di proprietà di MSCI e i dati sono qui inclusi solo a scopo personale e non commerciale.
+I dati dei mercati emergenti (indice MSCI Emerging Markets, net total return, EUR) non sono inclusi nel repository perché l'indice è di proprietà di MSCI. Per usarli, crea `data/msci_em_eur.csv` con colonne `Year,msci_em_eur` (rendimento annuale decimale, es. `0.12` = +12%), ad esempio dai valori mensili di [Curvo](https://curvo.eu). Su Streamlit Cloud incolla il contenuto del CSV nei Secrets come `msci_em_csv = """..."""`.
