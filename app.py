@@ -159,6 +159,7 @@ with st.sidebar.form("form_parametri_fire"):
     abilita_bav = False
     bav_mensile = 0.0
     bav_contributo_datore = 0.0
+    bav_rendimento_reale = SimulationConfig().bav_rendimento_reale
     if is_germania:
         abilita_bav = st.checkbox(
             "Includi Pensione Aziendale (Direktversicherung)",
@@ -174,6 +175,11 @@ with st.sidebar.form("form_parametri_fire"):
                 "Contributo Datore sulla Direktversicherung (% del tuo versamento)",
                 min_value=0.0, max_value=100.0, value=0.0, step=5.0,
                 help="Per legge il datore deve aggiungere il 15% se risparmia contributi sociali (§ 1a BetrAVG). Verifica con HR; 0 = prudente."
+            ) / 100.0
+            bav_rendimento_reale = st.number_input(
+                "Rendimento Reale Annuo del Contratto (%)",
+                min_value=-2.0, max_value=8.0, value=round(bav_rendimento_reale * 100.0, 2), step=0.5,
+                help="Oltre l'inflazione, al netto dei costi del contratto. Fondo azionario: circa 3-4%; garanzia pura: circa 0-1%."
             ) / 100.0
 
     st.subheader("📈 Asset Allocation & Mercati")
@@ -285,6 +291,7 @@ cfg = SimulationConfig(
     abilita_bav=abilita_bav,
     bav_mensile=float(bav_mensile),
     bav_contributo_datore=float(bav_contributo_datore),
+    bav_rendimento_reale=float(bav_rendimento_reale),
     nome_dataset_azionario=nome_azionario,
     target_equity_accumulo=eq_acc,
     target_bond_accumulo=bd_acc,
