@@ -3,7 +3,12 @@
 from typing import Union, Dict
 import numpy as np
 
-from config.settings import TETTO_RV_AV_2026, TETTO_KV_PV_2026
+from config.settings import (
+    TETTO_RV_AV_2026,
+    TETTO_KV_PV_2026,
+    QUOTA_BAV_ESENTE_TASSE,
+    QUOTA_BAV_ESENTE_CONTRIBUTI,
+)
 
 
 # Parametri fiscali Germania 2026 (valori nominali odierni, indicizzati con il fattore di inflazione)
@@ -45,7 +50,8 @@ def calcola_dettaglio_tasse_germania(
     aliquota_kv: float = 0.08645,
     aliquota_pv: float = 0.018,
     supplemento_pv_senza_figli: float = 0.006,
-    ha_figli: bool = False
+    ha_figli: bool = False,
+    bav_annuo: Union[float, np.ndarray] = 0.0
 ) -> Dict[str, np.ndarray]:
     """
     Restituisce il dettaglio disaggregato (vettorizzato 1D o 2D) delle singole voci fiscali e sanitarie in Germania
@@ -53,9 +59,17 @@ def calcola_dettaglio_tasse_germania(
     1. Contributi dipendente: RV 9.3% + AV 1.3% (tetto 101.400 €), KV/PV su tetto 69.750 €.
     2. Lohnsteuer con tariffa progressiva § 32a EStG su imponibile = RAL - Pauschbeträge - Vorsorgepauschale.
     3. Solidaritätszuschlag con Milderungszone (§ 4 SolzG).
+    Con Direktversicherung (bav_annuo, Entgeltumwandlung) l'imponibile fiscale scende fino all'8% della BBG e
+    quello contributivo fino al 4%; il versamento non rientra in "totale" (è risparmio, non trattenuta).
     """
     tetto_rv_av = TETTO_RV_AV_2026 * fattore_inflazione
     tetto_kv_pv = TETTO_KV_PV_2026 * fattore_inflazione
+
+    bav = np.asarray(bav_annuo, dtype=float) * np.ones_like(ral)
+    bav_esente_tasse = np.minimum(bav, QUOTA_BAV_ESENTE_TASSE * tetto_rv_av)
+    bav_esente_contributi = np.minimum(bav, QUOTA_BAV_ESENTE_CONTRIBUTI * tetto_rv_av)
+    ral_fiscale = ral - bav_esente_tasse
+    ral = ral - bav_esente_contributi  # base contributiva
 
     ral_capped_rv = np.minimum(ral, tetto_rv_av)
     quota_rv = ral_capped_rv * ALIQUOTA_RV
@@ -80,7 +94,7 @@ def calcola_dettaglio_tasse_germania(
         )
 
     pauschbetraege = (WERBUNGSKOSTEN_PAUSCHALE_2026 + SONDERAUSGABEN_PAUSCHALE_2026) * fattore_inflazione
-    imponibile = np.maximum(0.0, ral - pauschbetraege - quota_rv - quota_sanitaria_deducibile)
+    imponibile = np.maximum(0.0, ral_fiscale - pauschbetraege - quota_rv - quota_sanitaria_deducibile)
     imposta_base = einkommensteuer_32a(imponibile / fattore_inflazione) * fattore_inflazione
 
     freigrenze_soli = SOLI_FREIGRENZE_2026 * fattore_inflazione
@@ -97,6 +111,7 @@ def calcola_dettaglio_tasse_germania(
         "av": quota_av,
         "lohnsteuer": imposta_base,
         "soli": soli,
+        "bav": bav,
         "totale": totale_trattenute
     }
 
@@ -120,7 +135,7 @@ def calcola_netto_salario_germania(
         inflazione_medica_extra=inflazione_medica_extra,
         **parametri_contributivi
     )
-    return np.maximum(0.0, ral - det["totale"])
+    return np.maximum(0.0, ral - det["totale"] - det["bav"])
 
 
 def detrazione_lavoro_dipendente(reddito: np.ndarray, fattore_inflazione: np.ndarray) -> np.ndarray:

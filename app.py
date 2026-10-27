@@ -143,6 +143,20 @@ with st.sidebar.form("form_parametri_fire"):
         costo_pkv_fire = 780.0
         inflaz_medica = 0.01
 
+    abilita_bav = False
+    bav_mensile = 0.0
+    if is_germania:
+        abilita_bav = st.checkbox(
+            "Includi Pensione Aziendale (Direktversicherung)",
+            value=False,
+            help="Versamento mensile lordo (Entgeltumwandlung): esente da imposte fino all'8% della BBG (676 €/mese) e da contributi fino al 4% (338 €/mese); la rendita è tassata per intero alla pensione."
+        )
+        if abilita_bav:
+            bav_mensile = st.number_input(
+                "Versamento Mensile Direktversicherung (€ lordi)",
+                min_value=0.0, max_value=1_500.0, value=200.0, step=25.0
+            )
+
     st.subheader("📈 Asset Allocation & Mercati")
     scelta_azionario = st.selectbox(
         "Indice Azionario di Riferimento",
@@ -228,6 +242,8 @@ cfg = SimulationConfig(
     costo_mensile_pkv_iniziale=float(costo_pkv_iniziale),
     costo_mensile_pkv_fire_nominale=float(costo_pkv_fire),
     inflazione_medica_extra_annua=float(inflaz_medica),
+    abilita_bav=abilita_bav,
+    bav_mensile=float(bav_mensile),
     nome_dataset_azionario=nome_azionario,
     target_equity_accumulo=eq_acc,
     target_bond_accumulo=bd_acc,

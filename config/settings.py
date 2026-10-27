@@ -13,6 +13,8 @@ OUTPUT_DIR = BASE_DIR / "output"
 # Parametri contributivi Germania 2026 (€/anno, indicizzati all'inflazione nelle simulazioni)
 TETTO_RV_AV_2026 = 101_400.0   # Beitragsbemessungsgrenze RV/AV
 TETTO_KV_PV_2026 = 69_750.0    # Beitragsbemessungsgrenze KV/PV
+QUOTA_BAV_ESENTE_TASSE = 0.08  # § 3 Nr. 63 EStG: 8% della BBG RV (8.112 € nel 2026)
+QUOTA_BAV_ESENTE_CONTRIBUTI = 0.04  # § 1 SvEV: 4% della BBG RV (4.056 € nel 2026)
 
 
 @dataclass
@@ -72,6 +74,15 @@ class SimulationConfig:
     inflazione_medica_extra_annua: float = 0.01  # Crescita reale dei premi sanitari oltre l'inflazione (+1%/anno)
     costo_mensile_pkv_fire_nominale: float = 780.0  # Quota a carico in FIRE prima dei 67 anni senza datore di lavoro (€/mese odierni)
     costo_mensile_gkv_fire_nominale: float = 450.0  # Quota volontaria GKV in FIRE prima dei 67 anni (€/mese odierni)
+
+    # Pensione aziendale (Direktversicherung, solo Germania): Entgeltumwandlung dallo stipendio lordo
+    abilita_bav: bool = False
+    bav_mensile: float = 200.0              # Versamento lordo mensile (€ odierni, indicizzato all'inflazione)
+    bav_rendimento_reale: float = 0.01      # Rendimento reale annuo del contratto (oltre l'inflazione)
+    bav_coeff_rendita: float = 0.036        # Rendita annua lorda per € di capitale all'età di pensione
+    bav_rivalutazione_rendita: float = 0.01 # Rivalutazione annua nominale della rendita (Überschüsse)
+    aliquota_imposta_bav_pensione: float = 0.22  # Imposta sul reddito sulla rendita (tassata per intero)
+    aliquota_kv_pv_bav_pensione: float = 0.19    # KV+PV sulle rendite aziendali (solo GKV, quota piena)
 
     # Campionamento Sincrono Triadi (Joint Vector Block Bootstrap: Stock EUR + Bond EUR + Inflazione Locale)
     usa_campionamento_sincrono: bool = True

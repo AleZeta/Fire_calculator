@@ -235,3 +235,46 @@ def calcola_pensione_totale_ue(
         "anni_it_totali": anni_it_totali,
         "tipo_sanita": tipo_sanita
     }
+
+
+def calcola_capitale_bav(
+    contributi_annui: np.ndarray,
+    inflazione: np.ndarray,
+    rendimento_reale: float
+) -> np.ndarray:
+    """
+    Capitale accumulato nella Direktversicherung a fine di ciascun anno di versamento (shape: anni_acc + 1, sim).
+    Rendimento nominale = inflazione dell'anno + rendimento reale del contratto.
+    """
+    anni_acc, num_sim = contributi_annui.shape
+    capitale = np.zeros((anni_acc + 1, num_sim))
+    for t in range(anni_acc):
+        capitale[t + 1, :] = (capitale[t, :] + contributi_annui[t, :]) * (1.0 + inflazione[t, :] + rendimento_reale)
+    return capitale
+
+
+def calcola_pensione_bav_netta(
+    capitale_a_fire: np.ndarray,
+    anni_lavoro: int,
+    inflazione: np.ndarray,
+    eta_iniziale: int,
+    eta_pensione: int,
+    rendimento_reale: float,
+    coeff_rendita: float,
+    aliquota_imposta: float,
+    aliquota_kv_pv: float,
+    tipo_sanita: str = "PKV"
+) -> np.ndarray:
+    """
+    Rendita netta annua della Direktversicherung alla decorrenza (€ nominali all'età di pensione).
+    Dopo l'uscita dal lavoro (FIRE) i versamenti cessano e il capitale continua a rendere fino alla decorrenza.
+    La rendita è tassata per intero (imposta sul reddito) e, in GKV, soggetta a KV+PV a quota piena.
+    """
+    anni_a_pensione = max(0, eta_pensione - eta_iniziale)
+    capitale = capitale_a_fire
+    if anni_a_pensione > anni_lavoro:
+        crescita = np.prod(1.0 + inflazione[anni_lavoro:anni_a_pensione, :] + rendimento_reale, axis=0)
+        capitale = capitale_a_fire * crescita
+    lorda = capitale * coeff_rendita
+    prelievo = aliquota_imposta + (aliquota_kv_pv if tipo_sanita.upper() == "GKV" else 0.0)
+    return lorda * (1.0 - prelievo)

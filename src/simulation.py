@@ -7,8 +7,13 @@ import pandas as pd
 from scipy.ndimage import uniform_filter1d
 
 from config.settings import SimulationConfig
-from src.pension import calcola_pensione_totale_ue
+from src.pension import (
+    calcola_pensione_totale_ue,
+    calcola_capitale_bav,
+    calcola_pensione_bav_netta,
+)
 from src.taxes import calcola_stipendio_netto_automatico
+from config.settings import TETTO_RV_AV_2026, QUOTA_BAV_ESENTE_CONTRIBUTI
 
 
 def calcola_curva_spese_dinamica(
@@ -41,6 +46,51 @@ def parametri_contributivi_config(config: SimulationConfig) -> Dict[str, Any]:
     }
 
 
+def bav_attiva(config: SimulationConfig) -> bool:
+    """La Direktversicherung è disponibile solo per dipendenti in Germania."""
+    return config.abilita_bav and config.is_germania and config.bav_mensile > 0.0
+
+
+def contributi_bav_annui(config: SimulationConfig, fattore_infl: np.ndarray) -> np.ndarray:
+    """Versamento lordo annuo nella Direktversicherung (nominale, indicizzato all'inflazione)."""
+    return config.bav_mensile * 12.0 * fattore_infl[:config.anni_acc, :]
+
+
+def ral_valida_pensione(config: SimulationConfig, ral_infl: np.ndarray, fattore_infl: np.ndarray) -> np.ndarray:
+    """RAL su cui maturano gli Entgeltpunkte: la parte di bAV esente da contributi non genera punti GRV."""
+    if not bav_attiva(config):
+        return ral_infl
+    tetto = QUOTA_BAV_ESENTE_CONTRIBUTI * TETTO_RV_AV_2026 * fattore_infl[:config.anni_acc, :]
+    return ral_infl - np.minimum(contributi_bav_annui(config, fattore_infl), tetto)
+
+
+def aggiungi_pensione_bav(
+    p_det: Dict[str, Any],
+    config: SimulationConfig,
+    dyn: int,
+    capitale_bav: Optional[np.ndarray],
+    inflazione: np.ndarray
+) -> Dict[str, Any]:
+    """Aggiunge al dettaglio pensionistico la rendita netta della Direktversicherung (se attiva)."""
+    if not bav_attiva(config) or capitale_bav is None:
+        return p_det
+    p_det = dict(p_det)
+    p_det["pensione_netta_bav"] = calcola_pensione_bav_netta(
+        capitale_a_fire=capitale_bav[dyn, :],
+        anni_lavoro=dyn,
+        inflazione=inflazione,
+        eta_iniziale=config.eta_iniziale,
+        eta_pensione=config.eta_pensione,
+        rendimento_reale=config.bav_rendimento_reale,
+        coeff_rendita=config.bav_coeff_rendita,
+        aliquota_imposta=config.aliquota_imposta_bav_pensione,
+        aliquota_kv_pv=config.aliquota_kv_pv_bav_pensione,
+        tipo_sanita=config.tipo_sanita_germania,
+    )
+    p_det["eta_accesso_bav"] = config.eta_pensione
+    return p_det
+
+
 def calcola_depositi_e_tfr(
     config: SimulationConfig,
     inflazione: np.ndarray,
@@ -64,6 +114,9 @@ def calcola_depositi_e_tfr(
         ral_infl[1:, :] = config.ral * np.cumprod(crescita, axis=0)
 
     anni_col = np.arange(anni_acc)[:, np.newaxis]
+    parametri_fiscali = parametri_contributivi_config(config)
+    if bav_attiva(config):
+        parametri_fiscali["bav_annuo"] = contributi_bav_annui(config, fattore_infl)
     netto = calcola_stipendio_netto_automatico(
         ral=ral_infl,
         paese=config.paese,
@@ -72,7 +125,7 @@ def calcola_depositi_e_tfr(
         costo_mensile_pkv=config.costo_mensile_pkv_iniziale,
         anno=anni_col,
         inflazione_medica_extra=config.inflazione_medica_extra_annua,
-        **parametri_contributivi_config(config)
+        **parametri_fiscali
     )
     depositi = netto - spese[:anni_acc, :]
 
@@ -238,6 +291,8 @@ def simula_decumulo_fire_avanzato(
     p_grv_base = pensione_dettaglio["pensione_netta_grv"]
     p_inps_base = pensione_dettaglio["pensione_netta_inps"]
     zuschuss_drv_val = pensione_dettaglio.get("zuschuss_drv", z0)
+    p_bav_base = pensione_dettaglio.get("pensione_netta_bav")
+    idx_bav = max(0, pensione_dettaglio.get("eta_accesso_bav", config.eta_pensione) - config.eta_iniziale)
 
     denom_grv = np.maximum(cum_infl[idx_grv - 1, :], 1e-9) if idx_grv > 0 else 1.0
     denom_inps = np.maximum(cum_infl[idx_inps - 1, :], 1e-9) if idx_inps > 0 else 1.0
@@ -275,6 +330,12 @@ def simula_decumulo_fire_avanzato(
             elif idx_vita >= idx_inps:
                 f_riv_inps = 1.0 if idx_vita <= idx_inps else (f_infl_vita / denom_inps)
                 spesa_anno = np.maximum(0.0, spesa_anno - p_inps_base * f_riv_inps)
+
+        # Rendita Direktversicherung (nominale, rivalutata annualmente)
+        if p_bav_base is not None and idx_vita >= idx_bav:
+            spesa_anno = np.maximum(
+                0.0, spesa_anno - p_bav_base * ((1.0 + config.bav_rivalutazione_rendita) ** (idx_vita - idx_bav))
+            )
 
         patrimonio_tot_disp = tot[t, :] + buffer[t, :]
 
@@ -433,6 +494,11 @@ def esegui_simulazione_completa(
         config, depositi, md_eq, md_bond
     )
 
+    capitale_bav = None
+    if bav_attiva(config):
+        capitale_bav = calcola_capitale_bav(contributi_bav_annui(config, cum_infl), inflazione, config.bav_rendimento_reale)
+    ral_pens = ral_valida_pensione(config, ral_infl, cum_infl)
+
     capitale_vita = []
     pensioni_list = []
     pensioni_dettaglio_list = []
@@ -448,7 +514,7 @@ def esegui_simulazione_completa(
                 anni_pregressi_italia=config.anni_pregressi_italia,
                 anni_pregressi_germania=config.anni_pregressi_germania,
                 ral_pregressa_italia=config.ral_pregressa_italia,
-                ral_infl_serie=ral_infl,
+                ral_infl_serie=ral_pens,
                 inflazione=inflazione,
                 eta_iniziale=config.eta_iniziale,
                 eta_pensione_target=config.eta_pensione,
@@ -470,8 +536,11 @@ def esegui_simulazione_completa(
                 "anni_it_totali": 0
             }
 
+        p_det = aggiungi_pensione_bav(p_det, config, dyn, capitale_bav, inflazione)
         pensioni_dettaglio_list.append(p_det)
-        pensioni_list.append(p_det["pensione_netta_grv"] + p_det["pensione_netta_inps"])
+        pensioni_list.append(
+            p_det["pensione_netta_grv"] + p_det["pensione_netta_inps"] + p_det.get("pensione_netta_bav", 0.0)
+        )
 
         cap_eq_start = cap_eq_acc[dyn, :].copy()
         cap_bd_start = cap_bd_acc[dyn, :].copy()
@@ -581,7 +650,7 @@ def simula_stress_test_storico(
             anni_pregressi_italia=cfg_1.anni_pregressi_italia,
             anni_pregressi_germania=cfg_1.anni_pregressi_germania,
             ral_pregressa_italia=cfg_1.ral_pregressa_italia,
-            ral_infl_serie=ral_infl,
+            ral_infl_serie=ral_valida_pensione(cfg_1, ral_infl, cum_infl),
             inflazione=infl,
             eta_iniziale=cfg_1.eta_iniziale,
             eta_pensione_target=cfg_1.eta_pensione,
@@ -602,6 +671,10 @@ def simula_stress_test_storico(
             "anni_de_totali": 0,
             "anni_it_totali": 0
         }
+
+    if bav_attiva(cfg_1):
+        cap_bav = calcola_capitale_bav(contributi_bav_annui(cfg_1, cum_infl), infl, cfg_1.bav_rendimento_reale)
+        p_det = aggiungi_pensione_bav(p_det, cfg_1, anni_accumulo, cap_bav, infl)
 
     cap_eq_start = cap_eq_acc[anni_accumulo, :].copy()
     cap_bd_start = cap_bd_acc[anni_accumulo, :].copy()
@@ -664,11 +737,19 @@ def esegui_analisi_sensitivita_strategie(
         c_s = replace(config, num_simulazioni=n_s, tipo_sanita_germania=san)
         spese_s = calcola_curva_spese_dinamica(c_s, inf_sub)
         depositi_s, ral_infl_s, tfr_s = calcola_depositi_e_tfr(c_s, inf_sub, spese_s, cum_infl)
+        cap_bav_s = (
+            calcola_capitale_bav(contributi_bav_annui(c_s, cum_infl), inf_sub, c_s.bav_rendimento_reale)
+            if bav_attiva(c_s) else None
+        )
+        ral_pens_s = ral_valida_pensione(c_s, ral_infl_s, cum_infl)
         p_dets_s = [
-            calcola_pensione_totale_ue(
-                c_s.paese, d, c_s.anni_pregressi_italia, c_s.anni_pregressi_germania,
-                c_s.ral_pregressa_italia, ral_infl_s, inf_sub, c_s.eta_iniziale,
-                c_s.eta_pensione, c_s.pil_reale_medio, c_s.tipo_sanita_germania, cum_infl
+            aggiungi_pensione_bav(
+                calcola_pensione_totale_ue(
+                    c_s.paese, d, c_s.anni_pregressi_italia, c_s.anni_pregressi_germania,
+                    c_s.ral_pregressa_italia, ral_pens_s, inf_sub, c_s.eta_iniziale,
+                    c_s.eta_pensione, c_s.pil_reale_medio, c_s.tipo_sanita_germania, cum_infl
+                ),
+                c_s, d, cap_bav_s, inf_sub
             )
             for d in range(c_s.anni_acc)
         ]
