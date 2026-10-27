@@ -22,7 +22,7 @@ def stima_irpef_italia(pensione_lorda: np.ndarray, fattore_inflazione_cum: np.nd
     q2 = np.clip(pensione_lorda - s1, 0.0, s2 - s1)
     q3 = np.maximum(0.0, pensione_lorda - s2)
 
-    irpef_lorda = (q1 * 0.23) + (q2 * 0.35) + (q3 * 0.43)
+    irpef_lorda = (q1 * 0.23) + (q2 * 0.33) + (q3 * 0.43)
     detrazione_base = 1_955.0 * fattore_inflazione_cum
     detrazione = np.where(
         pensione_lorda <= (8_500.0 * fattore_inflazione_cum),

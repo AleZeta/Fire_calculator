@@ -123,6 +123,19 @@ def calcola_netto_salario_germania(
     return np.maximum(0.0, ral - det["totale"])
 
 
+def detrazione_lavoro_dipendente(reddito: np.ndarray, fattore_inflazione: np.ndarray) -> np.ndarray:
+    """Detrazione per lavoro dipendente (art. 13 TUIR) per fasce di reddito complessivo, soglie indicizzate."""
+    r = reddito / fattore_inflazione
+    detrazione = np.where(
+        r <= 15_000.0, 1_955.0,
+        np.where(
+            r <= 28_000.0, 1_910.0 + 1_190.0 * (28_000.0 - r) / 13_000.0,
+            np.where(r <= 50_000.0, 1_910.0 * (50_000.0 - r) / 22_000.0, 0.0)
+        )
+    )
+    return detrazione * fattore_inflazione
+
+
 def calcola_dettaglio_tasse_italia(
     ral: np.ndarray,
     fattore_inflazione: np.ndarray
@@ -136,16 +149,10 @@ def calcola_dettaglio_tasse_italia(
     q1 = np.clip(imponibile_irpef, 0.0, s1)
     q2 = np.clip(imponibile_irpef - s1, 0.0, s2 - s1)
     q3 = np.maximum(0.0, imponibile_irpef - s2)
-    irpef_nazionale = (q1 * 0.23) + (q2 * 0.35) + (q3 * 0.43)
+    irpef_nazionale = (q1 * 0.23) + (q2 * 0.33) + (q3 * 0.43)  # IRPEF 2026: 23% / 33% / 43%
     addizionali = imponibile_irpef * 0.02
 
-    soglia_det = 15_000.0 * fattore_inflazione
-    max_det = 1_910.0 * fattore_inflazione
-    detrazione = np.where(
-        ral <= soglia_det,
-        max_det,
-        np.clip(max_det - (ral - soglia_det) * 0.05, 0.0, max_det)
-    )
+    detrazione = detrazione_lavoro_dipendente(imponibile_irpef, fattore_inflazione)
     imposta_netta = np.maximum(0.0, irpef_nazionale + addizionali - detrazione)
 
     return {
