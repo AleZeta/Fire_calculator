@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 
 from config.settings import SimulationConfig, DATA_DIR
 from src.market_data import (
+    carica_dataset_sincrono_eur,
     carica_serie_rendimenti,
     genera_matrice_rendimenti_vettorizzata,
     genera_rendimenti_obbligazionari,
@@ -188,6 +189,12 @@ with st.sidebar.form("form_parametri_fire"):
             min_value=0, max_value=50, value=0, step=5,
             help="Ribilanciata ogni anno. Il periodo storico parte dal primo anno in cui esistono tutti gli indici scelti."
         ) / 100.0
+        if quota_em > 0:
+            anni_storico = carica_dataset_sincrono_eur(SimulationConfig(quota_azioni_emergenti=quota_em))["Year"]
+            st.caption(
+                f"⚠️ Con gli emergenti il periodo storico è {anni_storico.min()}–{anni_storico.max()} "
+                f"({len(anni_storico)} anni invece di 1970–2024): i risultati non sono confrontabili con quelli senza emergenti."
+            )
     else:
         st.caption("Per aggiungere i mercati emergenti inserisci data/msci_em_eur.csv (colonne Year, msci_em_eur).")
 
