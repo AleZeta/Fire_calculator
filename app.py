@@ -432,7 +432,7 @@ eta_fire_sel = st.slider(
 st.session_state["eta_fire_target"] = eta_fire_sel
 anno_acc_sel = eta_fire_sel - cfg.eta_iniziale
 
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3, col4, col5 = st.columns(5)
 
 prob_100a = succ_fine_vita[anno_acc_sel]
 cap_fire_mediano = float(np.median(risultati["capitale_acc"][anno_acc_sel, :]))
@@ -472,6 +472,21 @@ with col4:
         f"{spese_annue_nom:,.0f} €/anno",
         f"{cfg.spese_mese:,.0f} €/mese"
     )
+
+with col5:
+    if anni_minimi_99 is not None:
+        st.metric(
+            "Età FIRE minima (≥ 99% successo)",
+            f"{cfg.eta_iniziale + anni_minimi_99} anni",
+            f"{anni_minimi_99}a di lavoro"
+        )
+    else:
+        st.metric(
+            "Età FIRE minima (≥ 99% successo)",
+            "Non raggiunta",
+            f"entro i {max_fire_age} anni",
+            delta_color="off"
+        )
 
 # Pre-calcolo condiviso delle 4 traiettorie di Stress Test Storici per l'età selezionata (~2 ms)
 MAPPA_ANNI_STRESS = {
