@@ -71,6 +71,14 @@ def test_modello_normale_a_forma_corretta():
     assert np.all(md_eq[0] == 1.0) and np.all(infl[0] == 0.0)
 
 
+def test_file_emergenti_versionato_e_coerente():
+    import pandas as pd
+    df = pd.read_csv(DATA_DIR / "msci_em_eur.csv")
+    assert list(df.columns) == ["Year", "msci_em_eur"]
+    assert df["Year"].tolist() == list(range(2001, 2026))  # anni di calendario consecutivi
+    assert df["msci_em_eur"].between(-0.6, 1.0).all()  # rendimenti annuali plausibili (min 2008, max 2009)
+
+
 if __name__ == "__main__":
     for nome, fn in list(globals().items()):
         if nome.startswith("test_"):

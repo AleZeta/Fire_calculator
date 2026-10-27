@@ -71,7 +71,7 @@ Fire_calculator/
 │   └── pdf_report.py        # Generatore dossier esecutivo PDF in 5 pagine A4 Landscape
 ├── data/
 │   ├── historical_triads_eur.csv # Dataset sincronizzato 1970-2024 (Azioni, Bund 10Y TR, Inflazione)
-│   └── msci_em_eur.csv          # Opzionale, non versionato (dati MSCI): MSCI EM Net TR in EUR, colonne Year,msci_em_eur
+│   └── msci_em_eur.csv          # MSCI Emerging Markets Net TR in EUR 2001-2025 (colonne Year,msci_em_eur); abilita lo slider degli emergenti
 ├── output/                  # Cartella per report PDF esportati
 ├── app.py                   # Dashboard Web interattiva (Streamlit)
 ├── main.py                  # Script CLI per simulazioni e generazione PDF da terminale
@@ -159,3 +159,7 @@ Il progetto è pre-configurato per essere distribuito gratuitamente su **Streaml
 ## 📖 Approfondimento della Modellazione
 Per un'analisi teorica completa delle formule, delle scelte metodologiche, dei limiti e delle FAQ concettuali, consulta il documento:
 👉 **[DOCUMENTAZIONE_MODELLAZIONE.md](DOCUMENTAZIONE_MODELLAZIONE.md)**
+
+## ⚖️ Dati e uso
+Progetto personale e didattico, senza scopo commerciale: non è un consiglio finanziario e non è in vendita.
+I rendimenti annuali in `data/msci_em_eur.csv` derivano dall'indice MSCI Emerging Markets (net total return, EUR) come riportato da [Curvo](https://curvo.eu); l'indice è di proprietà di MSCI e i dati sono qui inclusi solo a scopo personale e non commerciale.
