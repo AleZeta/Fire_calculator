@@ -56,11 +56,14 @@ st.set_page_config(
 # Dati MSCI Emerging Markets: non versionati. Online arrivano dai Secrets di Streamlit Cloud (chiave msci_em_csv)
 # e vengono scritti in data/msci_em_eur.csv; in locale basta il file.
 _file_em = DATA_DIR / "msci_em_eur.csv"
+_motivo_em = ""
 if not _file_em.exists():
     try:
         _file_em.write_text(st.secrets["msci_em_csv"].strip() + "\n", encoding="utf-8")
-    except Exception:
-        pass  # nessun secret configurato: l'app funziona senza lo slider degli emergenti
+    except KeyError:
+        _motivo_em = "Secret 'msci_em_csv' non trovato nei Secrets di questa app."
+    except Exception as e:  # nessun secrets.toml (locale) o cartella non scrivibile: l'app funziona senza lo slider
+        _motivo_em = f"Secret non leggibile ({type(e).__name__})."
 
 st.title("🔥 FIRE Calculator — Simulatore Monte Carlo Avanzato")
 st.markdown(
@@ -205,7 +208,8 @@ with st.sidebar.form("form_parametri_fire"):
                 f"({len(anni_storico)} anni invece di 1970–2024): i risultati non sono confrontabili con quelli senza emergenti."
             )
     else:
-        st.caption("Per aggiungere i mercati emergenti inserisci data/msci_em_eur.csv (colonne Year, msci_em_eur).")
+        st.caption("Per aggiungere i mercati emergenti inserisci data/msci_em_eur.csv (colonne Year, msci_em_eur)."
+                   + (f" {_motivo_em}" if _motivo_em else ""))
 
     durata_blocco = st.select_slider(
         "Durata Blocchi Temporali (Anni)",
