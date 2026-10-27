@@ -109,9 +109,10 @@ def calcola_pensione_grv_germania_prorata(
     if anni_futuri > 0:
         f_infl_sub = fattore_infl[:anni_futuri, :]
         anni_col = np.arange(anni_futuri)[:, np.newaxis]
-        tetto_sub = beitragsbemessungsgrenze_base * f_infl_sub
-        # Il Durchschnittsentgelt cresce con inflazione + crescita reale dei salari
-        medio_sub = durchschnittsentgelt_base * f_infl_sub * ((1.0 + crescita_reale_salari) ** anni_col)
+        # Durchschnittsentgelt e BBG seguono entrambi i salari: inflazione + crescita reale
+        fattore_salari = f_infl_sub * ((1.0 + crescita_reale_salari) ** anni_col)
+        tetto_sub = beitragsbemessungsgrenze_base * fattore_salari
+        medio_sub = durchschnittsentgelt_base * fattore_salari
         ral_valida = np.minimum(ral_infl_serie[:anni_futuri, :], tetto_sub)
         punti_totali += np.sum(ral_valida / medio_sub, axis=0)
 
