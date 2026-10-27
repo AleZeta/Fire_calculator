@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from config.settings import SimulationConfig
+from config.settings import SimulationConfig, DATA_DIR
 from src.market_data import (
     carica_serie_rendimenti,
     genera_matrice_rendimenti_vettorizzata,
@@ -181,6 +181,16 @@ with st.sidebar.form("form_parametri_fire"):
     modello_mercato = "normale" if "Normale" in scelta_modello else "storico"
     usa_sincrono = True
 
+    quota_em = 0.0
+    if (DATA_DIR / "msci_em_eur.csv").exists():
+        quota_em = st.slider(
+            "% Mercati Emergenti nella parte azionaria",
+            min_value=0, max_value=50, value=0, step=5,
+            help="Ribilanciata ogni anno. Il periodo storico parte dal primo anno in cui esistono tutti gli indici scelti."
+        ) / 100.0
+    else:
+        st.caption("Per aggiungere i mercati emergenti inserisci data/msci_em_eur.csv (colonne Year, msci_em_eur).")
+
     durata_blocco = st.select_slider(
         "Durata Blocchi Temporali (Anni)",
         options=[2, 3, 4, 5],
@@ -273,6 +283,7 @@ cfg = SimulationConfig(
     usa_guardrails_spesa=usa_guardrails,
     usa_campionamento_sincrono=usa_sincrono,
     modello_mercato=modello_mercato,
+    quota_azioni_emergenti=quota_em,
     anni_blocco_rendimenti=int(durata_blocco),
     usa_bond_tent=usa_bond_tent
 )
@@ -297,7 +308,7 @@ st.sidebar.caption(
 
 # ----------------- CACHING A DUE LIVELLI & STATO SESSIONE -----------------
 @st.cache_data(show_spinner="Caricamento serie storiche e matrici di mercato...")
-def get_dati_mercato(num_sim: int, eta_iniziale: int, eta_morte: int, ticker_az: str, paese: str, anni_blocco: int, usa_sincrono_flag: bool, modello: str):
+def get_dati_mercato(num_sim: int, eta_iniziale: int, eta_morte: int, ticker_az: str, paese: str, anni_blocco: int, usa_sincrono_flag: bool, modello: str, quota_em_flag: float):
     dummy_cfg = SimulationConfig(
         num_simulazioni=num_sim,
         eta_iniziale=eta_iniziale,
@@ -306,7 +317,8 @@ def get_dati_mercato(num_sim: int, eta_iniziale: int, eta_morte: int, ticker_az:
         paese=paese,
         anni_blocco_rendimenti=anni_blocco,
         usa_campionamento_sincrono=usa_sincrono_flag,
-        modello_mercato=modello
+        modello_mercato=modello,
+        quota_azioni_emergenti=quota_em_flag
     )
     if usa_sincrono_flag:
         return genera_matrici_multiasset_sincrone(dummy_cfg)
@@ -337,7 +349,8 @@ if "sim_data" not in st.session_state or submit_btn:
             cfg.paese,
             cfg.anni_blocco_rendimenti,
             cfg.usa_campionamento_sincrono,
-            cfg.modello_mercato
+            cfg.modello_mercato,
+            cfg.quota_azioni_emergenti
         )
         risultati = calcola_simulazione_fire(cfg, m_eq, md_eq, md_bond, inflazione)
         f_infl_media = np.mean(np.cumprod(1.0 + inflazione, axis=0), axis=1)

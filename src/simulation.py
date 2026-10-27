@@ -628,7 +628,7 @@ def simula_stress_test_storico(
     """
     from src.market_data import carica_dataset_sincrono_eur
 
-    df = carica_dataset_sincrono_eur(config)
+    df = carica_dataset_sincrono_eur(config, includi_em=False)  # stress test storici: serie completa dal 1970
     durata = config.anni_vita + 1
 
     is_world = config.nome_dataset_azionario.lower() in ("msci_world", "world", "urth")

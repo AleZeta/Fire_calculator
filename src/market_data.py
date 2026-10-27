@@ -18,7 +18,21 @@ def _leggi_csv_sincrono_cached(percorso_csv: str) -> pd.DataFrame:
     return pd.read_csv(csv_file)
 
 
-def carica_dataset_sincrono_eur(config: SimulationConfig) -> pd.DataFrame:
+def carica_serie_emergenti_eur(config: SimulationConfig) -> pd.DataFrame:
+    """Rendimenti annuali MSCI Emerging Markets Net TR in EUR (colonne: Year, msci_em_eur), forniti dall'utente."""
+    csv_file = config.data_dir / "msci_em_eur.csv"
+    if not csv_file.exists():
+        raise FileNotFoundError(
+            f"Dati dei mercati emergenti non trovati: {csv_file}. "
+            "Serve un CSV con colonne Year, msci_em_eur (rendimento annuale decimale, es. 0.12 = +12%)."
+        )
+    df_em = pd.read_csv(csv_file)
+    if not {"Year", "msci_em_eur"}.issubset(df_em.columns):
+        raise ValueError(f"{csv_file} deve contenere le colonne Year e msci_em_eur")
+    return df_em[["Year", "msci_em_eur"]]
+
+
+def carica_dataset_sincrono_eur(config: SimulationConfig, includi_em: bool = True) -> pd.DataFrame:
     """
     Carica il dataset storico unificato (1970 - 2024) in EUR contenente:
     - MSCI World Net Total Return in EUR
@@ -28,7 +42,16 @@ def carica_dataset_sincrono_eur(config: SimulationConfig) -> pd.DataFrame:
     - Inflazione Istat FOI (Italia)
     """
     csv_file = config.data_dir / "historical_triads_eur.csv"
-    return _leggi_csv_sincrono_cached(str(csv_file.resolve()))
+    df = _leggi_csv_sincrono_cached(str(csv_file.resolve()))
+    if not includi_em or config.quota_azioni_emergenti <= 0.0:
+        return df
+
+    # Con i mercati emergenti il periodo utilizzato parte dal primo anno in cui esistono tutti gli indici scelti
+    df = df.merge(carica_serie_emergenti_eur(config), on="Year", how="inner").reset_index(drop=True)
+    col_stock = "msci_world_eur" if _usa_msci_world(config) else "sp500_eur"
+    q = config.quota_azioni_emergenti
+    df["azioni_eur"] = (1.0 - q) * df[col_stock] + q * df["msci_em_eur"]
+    return df
 
 
 def _usa_msci_world(config: SimulationConfig) -> bool:
@@ -71,7 +94,10 @@ def genera_matrici_multiasset_sincrone(
     num_sim = config.num_simulazioni
     num_anni_blocco = config.anni_blocco_rendimenti
 
-    col_stock = "msci_world_eur" if _usa_msci_world(config) else "sp500_eur"
+    if config.quota_azioni_emergenti > 0.0:
+        col_stock = "azioni_eur"  # mix indice scelto + emergenti, ribilanciato ogni anno
+    else:
+        col_stock = "msci_world_eur" if _usa_msci_world(config) else "sp500_eur"
     serie_stock = df[col_stock].to_numpy()
     serie_bond = df["bund_10y_tr_eur"].to_numpy()
 
