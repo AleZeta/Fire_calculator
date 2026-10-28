@@ -655,6 +655,14 @@ with col5:
             delta_color="off"
         )
 
+# Capitale finale accanto al tasso di successo: mostra anche i vantaggi (es. fiscali) che non cambiano la probabilità
+_cap_fine = risultati["capitale_vita"][anno_acc_sel][-1, :]
+_f_fine = max(float(f_infl_media[-1]), 1e-9)
+st.caption(
+    f"Capitale a {cfg.eta_morte} anni (in € di oggi): mediano **{np.median(_cap_fine) / _f_fine:,.0f} €** · "
+    f"scenario sfavorevole (10° percentile) **{np.percentile(_cap_fine, 10) / _f_fine:,.0f} €**"
+)
+
 # Pre-calcolo condiviso delle 4 traiettorie di Stress Test Storici per l'età selezionata (~2 ms)
 MAPPA_ANNI_STRESS = {
     "Dot-Com 2000": 2000,
