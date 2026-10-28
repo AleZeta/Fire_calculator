@@ -16,6 +16,8 @@ for _mod in list(sys.modules.keys()):
 import streamlit as st
 import numpy as np
 import pandas as pd
+import hmac
+
 import matplotlib.pyplot as plt
 
 from config.settings import SimulationConfig, DATA_DIR
@@ -144,6 +146,30 @@ st.markdown(
 if st.button("📖 Guida ai campi e ai risultati"):
     guida_in_finestra()
 
+# ----------------- PROFILO PERSONALE (solo con password, dai Secrets) -----------------
+# I dati personali NON stanno nel codice: sono nei Secrets (online) o in .streamlit/secrets.toml (locale, ignorato da git).
+# Chiavi: profilo_password (stringa) e tabella [profilo]. Senza password giusta l'app usa i valori generici.
+PROFILO: dict = {}
+_pwd = st.sidebar.text_input("🔐 Profilo personale (password)", type="password", help="Precompila i campi con i tuoi dati. Vuoto = valori generici.")
+if _pwd:
+    try:
+        if hmac.compare_digest(_pwd.encode(), str(st.secrets["profilo_password"]).encode()):
+            PROFILO = dict(st.secrets["profilo"])
+            st.sidebar.success("Profilo caricato")
+        else:
+            st.sidebar.error("Password errata")
+    except Exception:
+        st.sidebar.error("Profilo non configurato in questa app")
+
+
+def _p(chiave, predefinito):
+    """Valore del profilo personale (se caricato) con lo stesso tipo del predefinito."""
+    try:
+        return type(predefinito)(PROFILO.get(chiave, predefinito))
+    except (TypeError, ValueError):
+        return predefinito
+
+
 # ----------------- SIDEBAR: PARAMETRI CONFIGURAZIONE CON FORM -----------------
 st.sidebar.header("🌍 Quadro Territoriale & Fiscale")
 paese_scelto = st.sidebar.selectbox(
@@ -176,26 +202,26 @@ with st.sidebar.form("form_parametri_fire"):
 
     st.subheader("🏛️ Carriera Pregressa (Totalizzazione UE)")
     st.caption("I periodi lavorati in diversi paesi UE si sommano per i requisiti minimi pensionistici (Regolamento UE 883/2004).")
-    anni_preg_it = st.number_input("Anni già lavorati in Italia", min_value=0, max_value=40, value=2, step=1)
-    anni_preg_de = st.number_input("Anni già lavorati in Germania", min_value=0, max_value=40, value=3, step=1)
-    ral_preg_it = st.number_input("RAL media avuta in Italia (€)", min_value=10_000, max_value=200_000, value=35_000, step=2_500)
+    anni_preg_it = st.number_input("Anni già lavorati in Italia", min_value=0, max_value=40, value=_p("anni_preg_it", 2), step=1)
+    anni_preg_de = st.number_input("Anni già lavorati in Germania", min_value=0, max_value=40, value=_p("anni_preg_de", 3), step=1)
+    ral_preg_it = st.number_input("RAL media avuta in Italia (€)", min_value=10_000, max_value=200_000, value=_p("ral_preg_it", 35_000), step=2_500)
 
     st.subheader("👤 Profilo Personale & Orizzonte")
-    eta_iniziale = st.number_input("Età Attuale", min_value=18, max_value=65, value=30, step=1)
+    eta_iniziale = st.number_input("Età Attuale", min_value=18, max_value=65, value=_p("eta", 30), step=1)
     eta_pensione = st.number_input("Età Pensione Canonica (Regelaltersgrenze / Vecchiaia)", min_value=60, max_value=75, value=67, step=1)
     eta_morte = st.number_input("Orizzonte Massimo (Fine Vita)", min_value=75, max_value=110, value=100, step=1)
     anni_acc = st.slider("Anni Futuri di Accumulo Testati", min_value=5, max_value=35, value=25, step=1)
 
     st.subheader("💶 Reddito e Spese")
-    capitale_iniziale = st.number_input("Capitale Iniziale Investito (€)", min_value=0, max_value=5_000_000, value=100_000, step=5_000)
-    ral = st.number_input("RAL Iniziale Attuale (€)", min_value=10_000, max_value=500_000, value=85_000, step=2_500)
-    crescita_ral_reale = st.slider("Crescita Reale Annua RAL (% oltre inflazione)", min_value=0.0, max_value=6.0, value=2.0, step=0.2) / 100.0
+    capitale_iniziale = st.number_input("Capitale Iniziale Investito (€)", min_value=0, max_value=5_000_000, value=_p("capitale_iniziale", 100_000), step=5_000)
+    ral = st.number_input("RAL Iniziale Attuale (€)", min_value=10_000, max_value=500_000, value=_p("ral", 85_000), step=2_500)
+    crescita_ral_reale = st.slider("Crescita Reale Annua RAL (% oltre inflazione)", min_value=0.0, max_value=6.0, value=_p("crescita_ral_reale_pct", 2.0), step=0.2) / 100.0
     spese_mese_accumulo = st.number_input(
-        "Spese Mensili Attuali, mentre lavori (€)", min_value=500, max_value=20_000, value=2_000, step=100,
+        "Spese Mensili Attuali, mentre lavori (€)", min_value=500, max_value=20_000, value=_p("spese_attuali", 2_000), step=100,
         help="Quanto spendi oggi al mese (€ di oggi, indicizzati all'inflazione). Quello che avanza dallo stipendio netto viene investito."
     )
     spese_mese = st.number_input(
-        "Spese Mensili Obiettivo in FIRE (€)", min_value=500, max_value=20_000, value=2_000, step=100,
+        "Spese Mensili Obiettivo in FIRE (€)", min_value=500, max_value=20_000, value=_p("spese_fire", 2_000), step=100,
         help="Quanto vuoi spendere al mese dopo il ritiro (€ di oggi). Determina il capitale necessario."
     )
 
@@ -204,7 +230,7 @@ with st.sidebar.form("form_parametri_fire"):
         tipo_sanita_input = st.radio(
             "Regime Sanitario in Accumulo",
             options=["Privata (PKV)", "Pubblica (GKV)"],
-            index=0,
+            index=1 if _p("sanita", "PKV") == "GKV" else 0,
             help="Scegli tra sanità privata (premio a tuo carico con deduzione fiscale) o pubblica (aliquota fissa su busta paga)."
         )
         tipo_sanita = "PKV" if "PKV" in tipo_sanita_input else "GKV"
@@ -212,12 +238,12 @@ with st.sidebar.form("form_parametri_fire"):
         if tipo_sanita == "PKV":
             costo_pkv_iniziale = st.number_input(
                 "Costo Mensile PKV a tuo carico (€)",
-                min_value=100.0, max_value=2_000.0, value=400.0, step=25.0,
+                min_value=100.0, max_value=2_000.0, value=_p("costo_pkv", 400.0), step=25.0,
                 help="Quota mensile a tuo carico detratta dalla busta paga (oltre al contributo del datore di lavoro)."
             )
             costo_pkv_fire = st.number_input(
                 "Costo Mensile PKV in FIRE prima dei 67a (€)",
-                min_value=200.0, max_value=3_000.0, value=780.0, step=25.0,
+                min_value=200.0, max_value=3_000.0, value=_p("costo_pkv_fire", 780.0), step=25.0,
                 help="In FIRE senza datore paghi il 100% del premio. Dai 67 anni la DRV versa il sussidio dell'8.15% (§ 106 SGB VI)."
             )
             inflaz_medica = st.slider(
@@ -242,22 +268,22 @@ with st.sidebar.form("form_parametri_fire"):
     if is_germania:
         abilita_bav = st.checkbox(
             "Includi Pensione Aziendale (Direktversicherung)",
-            value=False,
+            value=_p("bav", False),
             help="Versamento mensile lordo (Entgeltumwandlung): esente da imposte fino all'8% della BBG (676 €/mese) e da contributi fino al 4% (338 €/mese); la rendita è tassata per intero alla pensione."
         )
         if abilita_bav:
             bav_mensile = st.number_input(
                 "Versamento Mensile Direktversicherung (€ lordi)",
-                min_value=0.0, max_value=1_500.0, value=200.0, step=25.0
+                min_value=0.0, max_value=1_500.0, value=_p("bav_mensile", 200.0), step=25.0
             )
             bav_contributo_datore = st.number_input(
                 "Contributo Datore sulla Direktversicherung (% del tuo versamento)",
-                min_value=0.0, max_value=100.0, value=0.0, step=5.0,
+                min_value=0.0, max_value=100.0, value=_p("bav_datore_pct", 0.0), step=5.0,
                 help="Per legge il datore deve aggiungere il 15% se risparmia contributi sociali (§ 1a BetrAVG). Verifica con HR; 0 = prudente."
             ) / 100.0
             bav_rendimento_reale = st.number_input(
                 "Rendimento Reale Annuo del Contratto (%)",
-                min_value=-2.0, max_value=8.0, value=round(bav_rendimento_reale * 100.0, 2), step=0.5,
+                min_value=-2.0, max_value=8.0, value=_p("bav_rendimento_pct", round(bav_rendimento_reale * 100.0, 2)), step=0.5,
                 help="Oltre l'inflazione, al netto dei costi del contratto. Fondo azionario: circa 3-4%; garanzia pura: circa 0-1%."
             ) / 100.0
 

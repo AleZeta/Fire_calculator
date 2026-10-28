@@ -29,3 +29,6 @@ output/*.pdf
 
 # Dati MSCI (licenza): non versionati; in locale il file, online i Secrets di Streamlit
 data/msci_em_eur.csv
+
+# Segreti di Streamlit in locale (profilo personale, dati MSCI)
+.streamlit/secrets.toml
