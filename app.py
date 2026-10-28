@@ -89,6 +89,14 @@ def mostra_guida():
             "- **Anni Futuri di Accumulo Testati:** fino a quanti anni di lavoro da oggi vengono provate le età di ritiro FIRE.\n"
             "- **Includi Pensioni Pubbliche:** se disattivato, il piano si regge solo sul portafoglio."
         )
+    with st.expander("🇨🇭 Svizzera (AHV e libero passaggio)"):
+        st.markdown(
+            "- **Anni con contributi e reddito medio:** la rendita AHV è una rendita piena (tra circa 1.260 e 2.520 CHF al mese a seconda del reddito medio) "
+            "riproporzionata sugli anni versati su 44. Parte dai 65 anni ed è indicizzata all'inflazione.\n"
+            "- **Conto di libero passaggio:** il capitale del 2° pilastro. Si assume uno sblocco a 60 anni, interesse 0,5% l'anno e conversione in una rendita del 4% annuo del capitale.\n"
+            "- **Cambio:** euro per 1 franco. Le prestazioni sono tassate nel paese di residenza (stima 15%).\n"
+            "- Sono stime semplificate: per importi reali serve l'estratto della cassa di compensazione (AHV) e della fondazione di libero passaggio."
+        )
     with st.expander("🏥 Sanità in Germania (PKV / GKV)"):
         st.markdown(
             "- **GKV:** assicurazione pubblica, contributo in percentuale sullo stipendio. **PKV:** assicurazione privata con premio fisso a tuo carico.\n"
@@ -205,6 +213,14 @@ with st.sidebar.form("form_parametri_fire"):
     anni_preg_it = st.number_input("Anni già lavorati in Italia", min_value=0, max_value=40, value=_p("anni_preg_it", 2), step=1)
     anni_preg_de = st.number_input("Anni già lavorati in Germania", min_value=0, max_value=40, value=_p("anni_preg_de", 3), step=1)
     ral_preg_it = st.number_input("RAL media avuta in Italia (€)", min_value=10_000, max_value=200_000, value=_p("ral_preg_it", 35_000), step=2_500)
+
+    with st.expander("🇨🇭 Carriera pregressa in Svizzera (facoltativo)"):
+        st.caption("Rendita AHV (1° pilastro) in proporzione agli anni versati e capitale del 2° pilastro rimasto su un conto di libero passaggio. Stime semplificate.")
+        anni_preg_ch = st.number_input("Anni con contributi in Svizzera", min_value=0.0, max_value=40.0, value=_p("anni_preg_ch", 0.0), step=0.25)
+        ral_ch_chf = st.number_input("Reddito lordo annuo medio in Svizzera (CHF)", min_value=0, max_value=300_000, value=_p("ral_media_ch_chf", 0), step=2_500)
+        cap_lp_chf = st.number_input("Capitale su conto di libero passaggio (CHF)", min_value=0, max_value=2_000_000, value=_p("libero_passaggio_chf", 0), step=500,
+                                     help="Saldo del 2° pilastro (BVG/LPP) non ritirato. Da aggiornare con l'ultimo estratto conto.")
+        cambio_chf = st.number_input("Cambio (€ per 1 CHF)", min_value=0.5, max_value=1.5, value=_p("cambio_chf_eur", 1.0), step=0.01)
 
     st.subheader("👤 Profilo Personale & Orizzonte")
     eta_iniziale = st.number_input("Età Attuale", min_value=18, max_value=65, value=_p("eta", 30), step=1)
@@ -380,6 +396,10 @@ cfg = SimulationConfig(
     anni_pregressi_italia=int(anni_preg_it),
     anni_pregressi_germania=int(anni_preg_de),
     ral_pregressa_italia=float(ral_preg_it),
+    anni_pregressi_svizzera=float(anni_preg_ch),
+    ral_media_svizzera_chf=float(ral_ch_chf),
+    capitale_libero_passaggio_chf=float(cap_lp_chf),
+    cambio_chf_eur=float(cambio_chf),
     num_simulazioni=num_simulazioni,
     eta_iniziale=eta_iniziale,
     eta_pensione=eta_pensione,

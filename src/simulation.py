@@ -10,6 +10,7 @@ from config.settings import SimulationConfig
 from src.pension import (
     calcola_pensione_totale_ue,
     calcola_capitale_bav,
+    rendite_svizzere_nette_eur,
     calcola_pensione_bav_netta,
 )
 from src.taxes import calcola_stipendio_netto_automatico
@@ -305,6 +306,9 @@ def simula_decumulo_fire_avanzato(
     zuschuss_drv_val = pensione_dettaglio.get("zuschuss_drv", z0)
     p_bav_base = pensione_dettaglio.get("pensione_netta_bav")
     idx_bav = max(0, pensione_dettaglio.get("eta_accesso_bav", config.eta_pensione) - config.eta_iniziale)
+    ahv_reale, bvg_nominale = rendite_svizzere_nette_eur(config)
+    idx_ahv = max(0, config.eta_ahv - config.eta_iniziale)
+    idx_bvg = max(0, config.eta_sblocco_libero_passaggio - config.eta_iniziale)
 
     denom_grv = np.maximum(cum_infl[idx_grv - 1, :], 1e-9) if idx_grv > 0 else 1.0
     denom_inps = np.maximum(cum_infl[idx_inps - 1, :], 1e-9) if idx_inps > 0 else 1.0
@@ -348,6 +352,12 @@ def simula_decumulo_fire_avanzato(
             spesa_anno = np.maximum(
                 0.0, spesa_anno - p_bav_base * ((1.0 + config.bav_rivalutazione_rendita) ** (idx_vita - idx_bav))
             )
+
+        # Prestazioni svizzere: AHV indicizzata all'inflazione (dalla sua età), libero passaggio in € nominali
+        if abilita_pens and ahv_reale > 0.0 and idx_vita >= idx_ahv:
+            spesa_anno = np.maximum(0.0, spesa_anno - ahv_reale * f_infl_vita)
+        if bvg_nominale > 0.0 and idx_vita >= idx_bvg:
+            spesa_anno = np.maximum(0.0, spesa_anno - bvg_nominale)
 
         patrimonio_tot_disp = tot[t, :] + buffer[t, :]
 

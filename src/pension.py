@@ -299,3 +299,40 @@ def calcola_pensione_bav_netta(
     lorda = capitale * coeff_rendita
     prelievo = aliquota_imposta + (aliquota_kv_pv if tipo_sanita.upper() == "GKV" else 0.0)
     return lorda * (1.0 - prelievo)
+
+
+# Rendita AHV (1° pilastro svizzero): scala 44 semplificata, valori mensili in CHF (2025-2026)
+AHV_RENDITA_MIN_MESE = 1_260.0
+AHV_RENDITA_MAX_MESE = 2_520.0
+AHV_REDDITO_MIN = 15_120.0
+AHV_REDDITO_MAX = 90_720.0
+AHV_ANNI_SCALA = 44.0
+
+
+def calcola_rendita_ahv_annua_chf(anni_contributivi: float, reddito_medio_chf: float) -> float:
+    """
+    Rendita AHV annua lorda (CHF) per una carriera contributiva incompleta: rendita piena interpolata
+    linearmente tra minima e massima in base al reddito medio annuo, riproporzionata sugli anni versati (n/44).
+    Approssimazione: non applica fattori di rivalutazione dei redditi né lacune per anno.
+    """
+    if anni_contributivi <= 0.0 or reddito_medio_chf <= 0.0:
+        return 0.0
+    frazione = (reddito_medio_chf - AHV_REDDITO_MIN) / (AHV_REDDITO_MAX - AHV_REDDITO_MIN)
+    frazione = min(1.0, max(0.0, frazione))
+    piena_mese = AHV_RENDITA_MIN_MESE + frazione * (AHV_RENDITA_MAX_MESE - AHV_RENDITA_MIN_MESE)
+    quota = min(1.0, anni_contributivi / AHV_ANNI_SCALA)
+    return piena_mese * 12.0 * quota
+
+
+def rendite_svizzere_nette_eur(config) -> tuple:
+    """
+    (rendita AHV annua netta in € di oggi, rendita annua netta dal conto di libero passaggio in € nominali al momento dello sblocco).
+    """
+    netto = 1.0 - config.aliquota_imposta_pensione_svizzera
+    ahv = calcola_rendita_ahv_annua_chf(config.anni_pregressi_svizzera, config.ral_media_svizzera_chf)
+    ahv_eur = ahv * config.cambio_chf_eur * netto
+
+    anni_a_sblocco = max(0, config.eta_sblocco_libero_passaggio - config.eta_iniziale)
+    capitale = config.capitale_libero_passaggio_chf * config.cambio_chf_eur * (1.0 + config.tasso_libero_passaggio) ** anni_a_sblocco
+    bvg_eur = capitale * config.coeff_rendita_libero_passaggio * netto
+    return ahv_eur, bvg_eur

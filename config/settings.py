@@ -28,6 +28,15 @@ class SimulationConfig:
     anni_pregressi_italia: int = 2      # Anni già lavorati in Italia
     anni_pregressi_germania: int = 3    # Anni già lavorati in Germania
     ral_pregressa_italia: float = 35_000.0  # RAL media nei periodi lavorati in Italia
+    anni_pregressi_svizzera: float = 0.0    # Anni (anche frazionari) con contributi AHV in Svizzera
+    ral_media_svizzera_chf: float = 0.0     # Reddito lordo annuo medio in CHF su quegli anni
+    capitale_libero_passaggio_chf: float = 0.0  # Capitale del 2° pilastro (BVG/LPP) rimasto su un conto di libero passaggio, in CHF
+    cambio_chf_eur: float = 1.0             # EUR per 1 CHF
+    eta_ahv: int = 65                       # Età di accesso alla rendita AHV
+    eta_sblocco_libero_passaggio: int = 60  # Età dalla quale il capitale di libero passaggio può essere riscosso
+    tasso_libero_passaggio: float = 0.005   # Interesse nominale annuo sul conto di libero passaggio
+    coeff_rendita_libero_passaggio: float = 0.04  # Quota annua del capitale sbloccato spesa come rendita (nominale, costante)
+    aliquota_imposta_pensione_svizzera: float = 0.15  # Imposta stimata sulle prestazioni svizzere nel paese di residenza
 
     # Parametri generali Monte Carlo
     num_simulazioni: int = 5_000
