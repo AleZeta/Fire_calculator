@@ -238,6 +238,7 @@ with st.sidebar.form("form_parametri_fire"):
         spese_ch_fire = 3_500
         quota_az_ch = 50
         quota_carico_ch = 0
+        vendite_esenti_ch = True
         if abilita_ch:
             anni_ch_fire = st.number_input("Anni in Svizzera prima del FIRE", min_value=1, max_value=5, value=3, step=1)
             ral_ch_fire = st.number_input("RAL lorda in Svizzera (CHF)", min_value=30_000, max_value=500_000, value=_p("ral_svizzera_chf", 100_000), step=5_000)
@@ -246,6 +247,10 @@ with st.sidebar.form("form_parametri_fire"):
             spese_ch_fire = st.number_input("Spese mensili in Svizzera (CHF)", min_value=1_000, max_value=15_000, value=_p("spese_svizzera_chf", 3_500), step=100)
             quota_az_ch = st.slider("Quota azioni a fine periodo (%)", min_value=20, max_value=80, value=50, step=5,
                                     help="La quota azionaria scende verso questo valore vendendo azioni senza imposta sul capital gain.")
+            vendite_esenti_ch = st.checkbox(
+                "Vendite senza imposta in Svizzera", value=True,
+                help="Deseleziona per confrontare: le stesse vendite pagano il capital gain del paese scelto, come se non ti trasferissi."
+            )
             quota_carico_ch = st.slider("Vendi e ricompra: quota del portafoglio (%)", min_value=0, max_value=100, value=0, step=10,
                                         help="Vende e ricompra questa quota a fine periodo: il prezzo di carico riparte dal valore attuale e le plusvalenze passate non vengono tassate al ritorno.")
             st.caption("⚠️ Verifica con un consulente: il trasferimento di residenza ha effetti fiscali (es. perdita del domicilio fiscale, regole antielusive) che il modello non valuta.")
@@ -435,6 +440,7 @@ cfg = SimulationConfig(
     spese_mese_svizzera_chf=float(spese_ch_fire),
     quota_azioni_fine_svizzera=float(quota_az_ch) / 100.0,
     quota_carico_azzerato_svizzera=float(quota_carico_ch) / 100.0,
+    vendite_svizzera_esenti=bool(vendite_esenti_ch),
     num_simulazioni=num_simulazioni,
     eta_iniziale=eta_iniziale,
     eta_pensione=eta_pensione,

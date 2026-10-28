@@ -44,6 +44,7 @@ class SimulationConfig:
     aliquota_effettiva_svizzera: float = 0.20  # Imposte e contributi totali sul lordo in Svizzera
     spese_mese_svizzera_chf: float = 3_500.0   # Spese mensili in Svizzera in CHF (di oggi)
     quota_azioni_fine_svizzera: float = 0.50   # Quota azionaria raggiunta a fine periodo, vendendo senza imposte
+    vendite_svizzera_esenti: bool = True    # False: le vendite del periodo svizzero pagano il capital gain del paese scelto (confronto)
     quota_carico_azzerato_svizzera: float = 0.0  # Quota del portafoglio venduta e riacquistata: il prezzo di carico riparte dal valore attuale
     tasso_altersgutschrift_bvg: float = 0.10  # Accantonamento annuo del 2° pilastro sul salario coordinato (35-44 anni: 10%)
 

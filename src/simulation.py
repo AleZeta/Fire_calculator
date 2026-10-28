@@ -233,6 +233,7 @@ def accumula_multi_asset_tax_efficient(
     for year in range(anni_acc if fino_anno is None else fino_anno):
         anni_mancanti = anni_acc - year
         in_svizzera = finestra_svizzera is not None and finestra_svizzera[0] <= year < finestra_svizzera[1]
+        senza_imposta = in_svizzera and config.vendite_svizzera_esenti
         if in_svizzera:
             durata_ch = finestra_svizzera[1] - finestra_svizzera[0]
             cur_eq_acc = target_eq + (config.quota_azioni_fine_svizzera - target_eq) * ((year - finestra_svizzera[0] + 1) / durata_ch)
@@ -270,14 +271,14 @@ def accumula_multi_asset_tax_efficient(
                 g_eq = np.maximum(0.0, 1.0 - r_c)
 
                 # Quantità da vendere tenendo conto dell'imposta sul capital gain
-                aliquota_vendita = 0.0 if in_svizzera else aliquota_eq
+                aliquota_vendita = 0.0 if senza_imposta else aliquota_eq
                 s_eq = np.where(
                     mask_reb,
                     np.minimum(eq_curr, delta_eq / np.maximum(1e-9, 1.0 - cur_eq_acc * g_eq * aliquota_vendita)),
                     0.0
                 )
                 gain_reb = s_eq * g_eq
-                if in_svizzera:
+                if senza_imposta:
                     tassa_reb = np.zeros_like(gain_reb)  # in Svizzera i privati non pagano capital gain
                 elif config.is_germania:
                     tassa_reb = np.maximum(0.0, gain_reb - config.franchigia_capital_gain_annua) * aliquota_eq
@@ -291,7 +292,7 @@ def accumula_multi_asset_tax_efficient(
                 carico_bd_curr += netto_acq_bd
 
         # Fine periodo svizzero: vendita e riacquisto senza imposta, il prezzo di carico riparte dal valore corrente
-        if in_svizzera and year == finestra_svizzera[1] - 1 and config.quota_carico_azzerato_svizzera > 0.0:
+        if senza_imposta and year == finestra_svizzera[1] - 1 and config.quota_carico_azzerato_svizzera > 0.0:
             q = config.quota_carico_azzerato_svizzera
             carico_eq_curr = (1.0 - q) * carico_eq_curr + q * eq_curr
             carico_bd_curr = (1.0 - q) * carico_bd_curr + q * bd_curr
