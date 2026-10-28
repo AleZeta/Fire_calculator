@@ -95,7 +95,10 @@ def mostra_guida():
             "riproporzionata sugli anni versati su 44. Parte dai 65 anni ed è indicizzata all'inflazione.\n"
             "- **Conto di libero passaggio:** il capitale del 2° pilastro. Si assume uno sblocco a 60 anni, interesse 0,5% l'anno e conversione in una rendita del 4% annuo del capitale.\n"
             "- **Cambio:** euro per 1 franco. Le prestazioni sono tassate nel paese di residenza (stima 15%).\n"
-            "- Sono stime semplificate: per importi reali serve l'estratto della cassa di compensazione (AHV) e della fondazione di libero passaggio."
+            "- Sono stime semplificate: per importi reali serve l'estratto della cassa di compensazione (AHV) e della fondazione di libero passaggio.\n"
+            "- **Trasferimento prima del FIRE:** negli ultimi anni di lavoro stipendio e spese sono svizzeri (in CHF, convertiti col cambio). In Svizzera non si paga capital gain sui privati, "
+            "quindi la quota azionaria scende verso il valore indicato vendendo senza imposta. Con *Vendi e ricompra* il prezzo di carico riparte dal valore attuale. "
+            "Gli anni svizzeri aumentano anche AHV e 2° pilastro e riducono gli anni tedeschi o italiani per la pensione. Stress test storici e analisi di sensitività non includono questo periodo."
         )
     with st.expander("🏥 Sanità in Germania (PKV / GKV)"):
         st.markdown(
@@ -221,6 +224,31 @@ with st.sidebar.form("form_parametri_fire"):
         cap_lp_chf = st.number_input("Capitale su conto di libero passaggio (CHF)", min_value=0, max_value=2_000_000, value=_p("libero_passaggio_chf", 0), step=500,
                                      help="Saldo del 2° pilastro (BVG/LPP) non ritirato. Da aggiornare con l'ultimo estratto conto.")
         cambio_chf = st.number_input("Cambio (€ per 1 CHF)", min_value=0.5, max_value=1.5, value=_p("cambio_chf_eur", 1.0), step=0.01)
+
+    with st.expander("🇨🇭 Trasferimento in Svizzera prima del FIRE (facoltativo)"):
+        abilita_ch = st.checkbox(
+            "Lavora in Svizzera negli ultimi anni prima del FIRE",
+            value=_p("svizzera", False),
+            help="In Svizzera i privati non pagano imposta sul capital gain: durante questo periodo le azioni si vendono senza tasse per scendere verso la quota prudente. "
+                 "Stipendio e spese sono quelli svizzeri; dopo il FIRE si torna al paese scelto."
+        )
+        anni_ch_fire = 3
+        ral_ch_fire = 100_000
+        aliq_ch_fire = 20.0
+        spese_ch_fire = 3_500
+        quota_az_ch = 50
+        quota_carico_ch = 0
+        if abilita_ch:
+            anni_ch_fire = st.number_input("Anni in Svizzera prima del FIRE", min_value=1, max_value=5, value=3, step=1)
+            ral_ch_fire = st.number_input("RAL lorda in Svizzera (CHF)", min_value=30_000, max_value=500_000, value=_p("ral_svizzera_chf", 100_000), step=5_000)
+            aliq_ch_fire = st.number_input("Imposte e contributi totali sul lordo (%)", min_value=5.0, max_value=45.0, value=_p("aliquota_svizzera_pct", 20.0), step=1.0,
+                                           help="Imposte sul reddito, AHV/ALV, 2° pilastro e assicurazione malattia: stima complessiva da adattare al cantone.")
+            spese_ch_fire = st.number_input("Spese mensili in Svizzera (CHF)", min_value=1_000, max_value=15_000, value=_p("spese_svizzera_chf", 3_500), step=100)
+            quota_az_ch = st.slider("Quota azioni a fine periodo (%)", min_value=20, max_value=80, value=50, step=5,
+                                    help="La quota azionaria scende verso questo valore vendendo azioni senza imposta sul capital gain.")
+            quota_carico_ch = st.slider("Vendi e ricompra: quota del portafoglio (%)", min_value=0, max_value=100, value=0, step=10,
+                                        help="Vende e ricompra questa quota a fine periodo: il prezzo di carico riparte dal valore attuale e le plusvalenze passate non vengono tassate al ritorno.")
+            st.caption("⚠️ Verifica con un consulente: il trasferimento di residenza ha effetti fiscali (es. perdita del domicilio fiscale, regole antielusive) che il modello non valuta.")
 
     st.subheader("👤 Profilo Personale & Orizzonte")
     eta_iniziale = st.number_input("Età Attuale", min_value=18, max_value=65, value=_p("eta", 30), step=1)
@@ -400,6 +428,13 @@ cfg = SimulationConfig(
     ral_media_svizzera_chf=float(ral_ch_chf),
     capitale_libero_passaggio_chf=float(cap_lp_chf),
     cambio_chf_eur=float(cambio_chf),
+    abilita_svizzera=bool(abilita_ch),
+    anni_svizzera=int(anni_ch_fire),
+    ral_svizzera_chf=float(ral_ch_fire),
+    aliquota_effettiva_svizzera=float(aliq_ch_fire) / 100.0,
+    spese_mese_svizzera_chf=float(spese_ch_fire),
+    quota_azioni_fine_svizzera=float(quota_az_ch) / 100.0,
+    quota_carico_azzerato_svizzera=float(quota_carico_ch) / 100.0,
     num_simulazioni=num_simulazioni,
     eta_iniziale=eta_iniziale,
     eta_pensione=eta_pensione,

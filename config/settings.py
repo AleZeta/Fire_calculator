@@ -37,6 +37,15 @@ class SimulationConfig:
     tasso_libero_passaggio: float = 0.005   # Interesse nominale annuo sul conto di libero passaggio
     coeff_rendita_libero_passaggio: float = 0.04  # Quota annua del capitale sbloccato spesa come rendita (nominale, costante)
     aliquota_imposta_pensione_svizzera: float = 0.15  # Imposta stimata sulle prestazioni svizzere nel paese di residenza
+    # Periodo di lavoro in Svizzera negli ultimi anni prima del FIRE (vendite di azioni senza imposta sul capital gain)
+    abilita_svizzera: bool = False
+    anni_svizzera: int = 3                  # Anni in Svizzera subito prima del FIRE
+    ral_svizzera_chf: float = 100_000.0     # RAL lorda annua in CHF (€ di oggi, indicizzata all'inflazione)
+    aliquota_effettiva_svizzera: float = 0.20  # Imposte e contributi totali sul lordo in Svizzera
+    spese_mese_svizzera_chf: float = 3_500.0   # Spese mensili in Svizzera in CHF (di oggi)
+    quota_azioni_fine_svizzera: float = 0.50   # Quota azionaria raggiunta a fine periodo, vendendo senza imposte
+    quota_carico_azzerato_svizzera: float = 0.0  # Quota del portafoglio venduta e riacquistata: il prezzo di carico riparte dal valore attuale
+    tasso_altersgutschrift_bvg: float = 0.10  # Accantonamento annuo del 2° pilastro sul salario coordinato (35-44 anni: 10%)
 
     # Parametri generali Monte Carlo
     num_simulazioni: int = 5_000

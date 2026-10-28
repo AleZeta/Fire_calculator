@@ -103,6 +103,47 @@ def aggiungi_pensione_bav(
     return p_det
 
 
+COORDINAMENTO_BVG_CHF = 26_460.0
+SALARIO_MAX_BVG_CHF = 88_200.0
+
+
+def svizzera_attiva(config: SimulationConfig) -> bool:
+    return config.abilita_svizzera and config.anni_svizzera > 0
+
+
+def depositi_con_svizzera(
+    config: SimulationConfig,
+    depositi: np.ndarray,
+    fattore_infl: np.ndarray,
+    inizio: int,
+    fine: int
+) -> np.ndarray:
+    """Negli anni [inizio, fine) il risparmio è stipendio netto svizzero meno spese svizzere (in € nominali)."""
+    d = depositi.copy()
+    f = fattore_infl[inizio:fine, :]
+    netto = config.ral_svizzera_chf * config.cambio_chf_eur * (1.0 - config.aliquota_effettiva_svizzera) * f
+    spese = config.spese_mese_svizzera_chf * 12.0 * config.cambio_chf_eur * f
+    d[inizio:fine, :] = netto - spese
+    return d
+
+
+def config_con_anni_svizzeri(config: SimulationConfig, anni_ch: int) -> SimulationConfig:
+    """Aggiunge gli anni lavorati in Svizzera prima del FIRE ad AHV (anni e reddito medio) e al capitale del 2° pilastro."""
+    if anni_ch <= 0:
+        return config
+    totale = config.anni_pregressi_svizzera + anni_ch
+    reddito_medio = (
+        config.anni_pregressi_svizzera * config.ral_media_svizzera_chf + anni_ch * config.ral_svizzera_chf
+    ) / totale
+    coordinato = max(0.0, min(config.ral_svizzera_chf, SALARIO_MAX_BVG_CHF) - COORDINAMENTO_BVG_CHF)
+    return replace(
+        config,
+        anni_pregressi_svizzera=totale,
+        ral_media_svizzera_chf=reddito_medio,
+        capitale_libero_passaggio_chf=config.capitale_libero_passaggio_chf + anni_ch * coordinato * config.tasso_altersgutschrift_bvg,
+    )
+
+
 def calcola_depositi_e_tfr(
     config: SimulationConfig,
     inflazione: np.ndarray,
@@ -156,11 +197,18 @@ def accumula_multi_asset_tax_efficient(
     config: SimulationConfig,
     depositi: np.ndarray,
     md_eq: np.ndarray,
-    md_bond: np.ndarray
+    md_bond: np.ndarray,
+    finestra_svizzera: Optional[Tuple[int, int]] = None,
+    fino_anno: Optional[int] = None
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Fase di accumulo multi-asset con Inflow Rebalancing e tassazione del capital gain
     sul ribilanciamento attivo per la Bond Tent (negli ultimi 5 anni pre-FIRE).
+
+    Con finestra_svizzera = (inizio, fine) negli anni [inizio, fine) si vive in Svizzera: la quota azionaria scende
+    verso quota_azioni_fine_svizzera vendendo senza imposta sul capital gain e, a fine periodo, una quota del portafoglio
+    (quota_carico_azzerato_svizzera) viene venduta e riacquistata, così il prezzo di carico riparte dal valore attuale.
+    fino_anno limita il calcolo ai primi anni (le righe successive restano a zero).
     """
     anni_acc = config.anni_acc
     num_sim = depositi.shape[1]
@@ -182,9 +230,13 @@ def accumula_multi_asset_tax_efficient(
     carico_eq[0, :] = cap_eq[0, :]
     carico_bd[0, :] = cap_bd[0, :]
 
-    for year in range(anni_acc):
+    for year in range(anni_acc if fino_anno is None else fino_anno):
         anni_mancanti = anni_acc - year
-        if config.usa_bond_tent and anni_mancanti <= 5:
+        in_svizzera = finestra_svizzera is not None and finestra_svizzera[0] <= year < finestra_svizzera[1]
+        if in_svizzera:
+            durata_ch = finestra_svizzera[1] - finestra_svizzera[0]
+            cur_eq_acc = target_eq + (config.quota_azioni_fine_svizzera - target_eq) * ((year - finestra_svizzera[0] + 1) / durata_ch)
+        elif config.usa_bond_tent and anni_mancanti <= 5:
             cur_eq_acc = target_eq - (target_eq - min_eq_tent) * ((5 - anni_mancanti) / 5.0)
         else:
             cur_eq_acc = target_eq
@@ -209,7 +261,7 @@ def accumula_multi_asset_tax_efficient(
 
         # 2. Se siamo nella Bond Tent (ultimi 5 anni pre-FIRE) e i depositi non bastano a scendere
         # alla quota azionaria target, si vendono azioni per acquistare bond pagando le imposte sul capital gain
-        if config.usa_bond_tent and anni_mancanti <= 5:
+        if in_svizzera or (config.usa_bond_tent and anni_mancanti <= 5):
             tot_curr = eq_curr + bd_curr
             delta_eq = np.maximum(0.0, eq_curr - cur_eq_acc * tot_curr)
             mask_reb = delta_eq > 1e-4
@@ -218,13 +270,16 @@ def accumula_multi_asset_tax_efficient(
                 g_eq = np.maximum(0.0, 1.0 - r_c)
 
                 # Quantità da vendere tenendo conto dell'imposta sul capital gain
+                aliquota_vendita = 0.0 if in_svizzera else aliquota_eq
                 s_eq = np.where(
                     mask_reb,
-                    np.minimum(eq_curr, delta_eq / np.maximum(1e-9, 1.0 - cur_eq_acc * g_eq * aliquota_eq)),
+                    np.minimum(eq_curr, delta_eq / np.maximum(1e-9, 1.0 - cur_eq_acc * g_eq * aliquota_vendita)),
                     0.0
                 )
                 gain_reb = s_eq * g_eq
-                if config.is_germania:
+                if in_svizzera:
+                    tassa_reb = np.zeros_like(gain_reb)  # in Svizzera i privati non pagano capital gain
+                elif config.is_germania:
                     tassa_reb = np.maximum(0.0, gain_reb - config.franchigia_capital_gain_annua) * aliquota_eq
                 else:
                     tassa_reb = gain_reb * aliquota_eq
@@ -234,6 +289,12 @@ def accumula_multi_asset_tax_efficient(
                 bd_curr += netto_acq_bd
                 carico_eq_curr = np.maximum(0.0, carico_eq_curr - s_eq * np.minimum(1.0, r_c))
                 carico_bd_curr += netto_acq_bd
+
+        # Fine periodo svizzero: vendita e riacquisto senza imposta, il prezzo di carico riparte dal valore corrente
+        if in_svizzera and year == finestra_svizzera[1] - 1 and config.quota_carico_azzerato_svizzera > 0.0:
+            q = config.quota_carico_azzerato_svizzera
+            carico_eq_curr = (1.0 - q) * carico_eq_curr + q * eq_curr
+            carico_bd_curr = (1.0 - q) * carico_bd_curr + q * bd_curr
 
         cap_eq[year + 1, :] = eq_curr
         cap_bd[year + 1, :] = bd_curr
@@ -517,9 +578,13 @@ def esegui_simulazione_completa(
     )
 
     capitale_bav = None
+    contributi_bav = None
     if bav_attiva(config):
-        capitale_bav = calcola_capitale_bav(contributi_bav_totali(config, cum_infl), inflazione, config.bav_rendimento_reale)
+        contributi_bav = contributi_bav_totali(config, cum_infl)
+        capitale_bav = calcola_capitale_bav(contributi_bav, inflazione, config.bav_rendimento_reale)
     ral_pens = ral_valida_pensione(config, ral_infl, cum_infl)
+    usa_ch = svizzera_attiva(config)
+    capitale_acc_ritorno = cap_tot_acc.copy() if usa_ch else cap_tot_acc
 
     capitale_vita = []
     pensioni_list = []
@@ -529,10 +594,28 @@ def esegui_simulazione_completa(
     percentuali_wd_rate_roll = np.full((anni_acc, anni_vita), np.nan)
 
     for dyn in range(anni_acc):
+        # Periodo in Svizzera negli ultimi anni prima del FIRE: l'accumulo dipende dall'età di ritiro
+        n_ch = min(config.anni_svizzera, dyn) if usa_ch else 0
+        cap_tot_use, cap_eq_use, cap_bd_use = cap_tot_acc, cap_eq_acc, cap_bd_acc
+        carico_eq_use, carico_bd_use = carico_eq_acc, carico_bd_acc
+        capitale_bav_dyn = capitale_bav
+        config_dyn = config
+        if n_ch > 0:
+            dep_ch = depositi_con_svizzera(config, depositi, cum_infl, dyn - n_ch, dyn)
+            cap_tot_use, cap_eq_use, cap_bd_use, carico_eq_use, carico_bd_use = accumula_multi_asset_tax_efficient(
+                config, dep_ch, md_eq, md_bond, finestra_svizzera=(dyn - n_ch, dyn), fino_anno=dyn
+            )
+            capitale_acc_ritorno[dyn, :] = cap_tot_use[dyn, :]
+            config_dyn = config_con_anni_svizzeri(config, n_ch)
+            if contributi_bav is not None:
+                contributi_senza_ch = contributi_bav.copy()
+                contributi_senza_ch[dyn - n_ch:dyn, :] = 0.0  # all'estero non si versa nella Direktversicherung
+                capitale_bav_dyn = calcola_capitale_bav(contributi_senza_ch, inflazione, config.bav_rendimento_reale)
+
         if config.abilita_pensione_pubblica:
             p_det = calcola_pensione_totale_ue(
                 paese_attuale=config.paese,
-                anni_lavoro_futuri=dyn,
+                anni_lavoro_futuri=dyn - n_ch,
                 anni_pregressi_italia=config.anni_pregressi_italia,
                 anni_pregressi_germania=config.anni_pregressi_germania,
                 ral_pregressa_italia=config.ral_pregressa_italia,
@@ -558,16 +641,16 @@ def esegui_simulazione_completa(
                 "anni_it_totali": 0
             }
 
-        p_det = aggiungi_pensione_bav(p_det, config, dyn, capitale_bav, inflazione)
+        p_det = aggiungi_pensione_bav(p_det, config, dyn, capitale_bav_dyn, inflazione)
         pensioni_dettaglio_list.append(p_det)
         pensioni_list.append(
             p_det["pensione_netta_grv"] + p_det["pensione_netta_inps"] + p_det.get("pensione_netta_bav", 0.0)
         )
 
-        cap_eq_start = cap_eq_acc[dyn, :].copy()
-        cap_bd_start = cap_bd_acc[dyn, :].copy()
-        carico_eq_start = carico_eq_acc[dyn, :].copy()
-        carico_bd_start = carico_bd_acc[dyn, :].copy()
+        cap_eq_start = cap_eq_use[dyn, :].copy()
+        cap_bd_start = cap_bd_use[dyn, :].copy()
+        carico_eq_start = carico_eq_use[dyn, :].copy()
+        carico_bd_start = carico_bd_use[dyn, :].copy()
 
         if config.abilita_tfr and dyn > 0:
             liquidazione_tfr_netta = tfr_maturato[dyn, :] * (1.0 - config.tassazione_separata_tfr)
@@ -590,11 +673,11 @@ def esegui_simulazione_completa(
             md_eq,
             md_bond,
             inflazione,
-            config,
+            config_dyn,
             cum_infl=cum_infl
         )
 
-        parte_acc = cap_tot_acc[:dyn, :]
+        parte_acc = cap_tot_use[:dyn, :]
         matrice_unita = np.concatenate((parte_acc, cap_patrimonio_fire), axis=0)[:anni_vita, :]
         capitale_vita.append(matrice_unita)
 
@@ -617,7 +700,7 @@ def esegui_simulazione_completa(
         "depositi": depositi,
         "ral_infl": ral_infl,
         "spese": spese,
-        "capitale_acc": cap_tot_acc,
+        "capitale_acc": capitale_acc_ritorno,
         "capitale_vita": capitale_vita,
         "pensioni_list": pensioni_list,
         "pensioni_dettaglio_list": pensioni_dettaglio_list,
