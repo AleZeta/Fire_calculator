@@ -309,7 +309,7 @@ with st.sidebar.form("form_parametri_fire"):
     if (DATA_DIR / "msci_em_eur.csv").exists():
         quota_em = st.slider(
             "% Mercati Emergenti nella parte azionaria",
-            min_value=0, max_value=50, value=0, step=5,
+            min_value=0, max_value=50, value=_p("quota_em_pct", 0), step=5,
             help="Ribilanciata ogni anno. Il periodo storico parte dal primo anno in cui esistono tutti gli indici scelti."
         ) / 100.0
         if quota_em > 0:
